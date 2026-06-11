@@ -52,7 +52,7 @@ function pointClass(points) {
 function renderBets(bets) {
   elements.bets.replaceChildren();
   if (!bets.length) {
-    elements.bets.innerHTML = '<p class="subtitle">No bets found for this phase.</p>';
+    elements.bets.innerHTML = '<p class="subtitle">Sin apuestas para esta fase.</p>';
     return;
   }
 
