@@ -286,6 +286,18 @@ h1 {
   padding: 10px 14px;
 }
 
+.hero-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.ghost-button.secondary {
+  color: var(--text-soft);
+}
+
 .primary-button {
   background: linear-gradient(135deg, #0284c7, #22c55e);
   padding: 12px 18px;
@@ -470,6 +482,7 @@ input {
 @media (max-width: 620px) {
   .hero { flex-direction: column; }
   .ghost-button { align-self: flex-start; }
+  .hero-actions { justify-content: flex-start; }
   .participant-card { align-items: flex-start; }
   .small-link { white-space: nowrap; }
 }

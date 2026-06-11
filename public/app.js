@@ -118,16 +118,16 @@ function selectMatchesToShow(matches) {
 
   if (live.length) {
     return {
-      title: 'En vivo / próximos partidos',
-      subtitle: '',
+      title: 'Live / next group matches',
+      subtitle: 'Live matches first, followed by the next scheduled group matches',
       matches: [...live, ...upcoming].slice(0, MAX_MATCH_CARDS)
     };
   }
 
   if (upcoming.length) {
     return {
-      title: 'Próximos partidos',
-      subtitle: 'Actualmente no hay partidos en directo',
+      title: 'Next group matches',
+      subtitle: 'The following scheduled group-stage matches',
       matches: upcoming.slice(0, MAX_MATCH_CARDS)
     };
   }
@@ -137,8 +137,8 @@ function selectMatchesToShow(matches) {
     .sort((a, b) => byKickoffThenMatchNo(b, a));
 
   return {
-    title: 'Resultados recientes',
-    subtitle: 'Fase de grupos completada',
+    title: 'Recent group results',
+    subtitle: 'All group matches appear to be finished, so showing the latest scored results',
     matches: recentFinished.slice(0, MAX_MATCH_CARDS)
   };
 }
@@ -179,10 +179,26 @@ function escapeHtml(value) {
     .replace(/'/g, '&#039;');
 }
 
-function setActiveTab(tabId) {
-  for (const panel of elements.tabPanels) panel.hidden = panel.id !== tabId;
+function normalizeTab(tab) {
+  if (tab === 'participants' || tab === 'participantsTab') return 'participantsTab';
+  return 'leaderboardTab';
+}
+
+function setActiveTab(tabId, updateUrl = false) {
+  const normalizedTab = normalizeTab(tabId);
+  for (const panel of elements.tabPanels) panel.hidden = panel.id !== normalizedTab;
   for (const button of elements.tabButtons) {
-    button.classList.toggle('active', button.dataset.tab === tabId);
+    button.classList.toggle('active', button.dataset.tab === normalizedTab);
+  }
+
+  if (updateUrl) {
+    const url = new URL(window.location.href);
+    if (normalizedTab === 'participantsTab') {
+      url.searchParams.set('tab', 'participants');
+    } else {
+      url.searchParams.delete('tab');
+    }
+    window.history.replaceState({}, '', url);
   }
 }
 
@@ -216,8 +232,11 @@ async function loadLeaderboard() {
   }
 }
 
+const initialTab = normalizeTab(new URLSearchParams(window.location.search).get('tab') || window.location.hash.replace('#', ''));
+setActiveTab(initialTab);
+
 for (const button of elements.tabButtons) {
-  button.addEventListener('click', () => setActiveTab(button.dataset.tab));
+  button.addEventListener('click', () => setActiveTab(button.dataset.tab, true));
 }
 
 elements.refreshBtn.addEventListener('click', loadLeaderboard);
