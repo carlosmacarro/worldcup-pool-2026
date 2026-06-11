@@ -8,6 +8,8 @@ const elements = {
   predictionsCount: document.querySelector('#predictionsCount'),
   lastUpdated: document.querySelector('#lastUpdated'),
   matches: document.querySelector('#matches'),
+  matchesTitle: document.querySelector('#matchesTitle'),
+  matchesSubtitle: document.querySelector('#matchesSubtitle'),
   refreshBtn: document.querySelector('#refreshBtn'),
   tabButtons: document.querySelectorAll('[data-tab]'),
   tabPanels: document.querySelectorAll('.tab-panel')
@@ -82,26 +84,87 @@ function renderParticipants(rows) {
   }
 }
 
+const LIVE_STATUSES = new Set(['IN_PLAY', 'PAUSED', 'LIVE']);
+const UPCOMING_STATUSES = new Set(['SCHEDULED', 'TIMED']);
+const MAX_MATCH_CARDS = 8;
+
+function matchTime(match) {
+  if (!match.kickoff) return Number.POSITIVE_INFINITY;
+  const date = new Date(match.kickoff);
+  return Number.isNaN(date.getTime()) ? Number.POSITIVE_INFINITY : date.getTime();
+}
+
+function byKickoffThenMatchNo(a, b) {
+  return matchTime(a) - matchTime(b) || Number(a.matchNo || 0) - Number(b.matchNo || 0);
+}
+
+function isLiveMatch(match) {
+  return LIVE_STATUSES.has(String(match.status || '').toUpperCase());
+}
+
+function isUpcomingMatch(match, now = Date.now()) {
+  const status = String(match.status || '').toUpperCase();
+  if (!UPCOMING_STATUSES.has(status)) return false;
+  const kickoff = matchTime(match);
+  return kickoff === Number.POSITIVE_INFINITY || kickoff >= now - 15 * 60 * 1000;
+}
+
+function selectMatchesToShow(matches) {
+  const now = Date.now();
+  const live = matches.filter(isLiveMatch).sort(byKickoffThenMatchNo);
+  const upcoming = matches
+    .filter((match) => !isLiveMatch(match) && isUpcomingMatch(match, now))
+    .sort(byKickoffThenMatchNo);
+
+  if (live.length) {
+    return {
+      title: 'Live / next group matches',
+      subtitle: 'Live matches first, followed by the next scheduled group matches',
+      matches: [...live, ...upcoming].slice(0, MAX_MATCH_CARDS)
+    };
+  }
+
+  if (upcoming.length) {
+    return {
+      title: 'Next group matches',
+      subtitle: 'The following scheduled group-stage matches',
+      matches: upcoming.slice(0, MAX_MATCH_CARDS)
+    };
+  }
+
+  const recentFinished = matches
+    .filter((match) => match.isScorable || String(match.status || '').toUpperCase() === 'FINISHED')
+    .sort((a, b) => byKickoffThenMatchNo(b, a));
+
+  return {
+    title: 'Recent group results',
+    subtitle: 'All group matches appear to be finished, so showing the latest scored results',
+    matches: recentFinished.slice(0, MAX_MATCH_CARDS)
+  };
+}
+
 function renderMatches(matches) {
   elements.matches.replaceChildren();
-  const interesting = matches
-    .filter((m) => m.status !== 'SCHEDULED' || m.isScorable)
-    .slice(-8)
-    .reverse();
+  const selection = selectMatchesToShow(matches || []);
 
-  if (!interesting.length) {
-    elements.matches.innerHTML = '<p class="subtitle">No scored group matches yet.</p>';
+  if (elements.matchesTitle) elements.matchesTitle.textContent = selection.title;
+  if (elements.matchesSubtitle) elements.matchesSubtitle.textContent = selection.subtitle;
+
+  if (!selection.matches.length) {
+    elements.matches.innerHTML = '<p class="subtitle">No group-stage matches available yet.</p>';
     return;
   }
 
-  for (const match of interesting) {
+  for (const match of selection.matches) {
     const card = document.createElement('article');
-    card.className = 'match-card';
+    const status = String(match.status || '').toUpperCase();
+    card.className = `match-card ${isLiveMatch(match) ? 'match-live' : isUpcomingMatch(match) ? 'match-upcoming' : 'match-finished'}`;
     const score = match.realHome === null || match.realAway === null ? '–' : `${match.realHome}–${match.realAway}`;
+    const statusLabel = isLiveMatch(match) ? 'LIVE' : status || 'SCHEDULED';
     card.innerHTML = `
       <div class="match-no">#${match.matchNo}</div>
       <div class="match-teams">${escapeHtml(match.homeTeam || 'TBD')} <span class="score">${score}</span> ${escapeHtml(match.awayTeam || 'TBD')}</div>
-      <div class="match-status">${escapeHtml(match.status || '')}<br>${formatDate(match.kickoff)}</div>
+      <div class="match-status"><span class="match-status-label">${escapeHtml(statusLabel)}</span><br>${formatDate(match.kickoff)}</div>
     `;
     elements.matches.appendChild(card);
   }
