@@ -5,22 +5,21 @@ This is a free-friendly mobile web app for your World Cup betting pool.
 It reads every friend's Excel file from a Google Drive folder, fetches World Cup 2026 results from football-data.org, calculates points, and shows a phone-friendly leaderboard.
 
 
-## New in this version: participants and phase pages
+## New in this version: simplified participant navigation
 
-The homepage now shows a group-stage leaderboard only. Group-stage bets are identified as match numbers `1` to `72` and/or Excel round labels `J1`, `J2`, `J3`.
+The homepage now shows a group-stage leaderboard and a Participants tab only. Group-stage bets are identified as match numbers `1` to `72` and/or Excel round labels `J1`, `J2`, `J3`.
 
-New pages:
+Tap a participant from the homepage to open their bets page. On that participant page there are two buttons:
 
-- `/participant.html?participant=PARTICIPANT_KEY&phase=group` — one participant's group-stage bets.
-- `/participant.html?participant=PARTICIPANT_KEY&phase=knockout` — one participant's knockout-phase bets.
-- `/knockouts.html` — participant selector for knockout-phase bets.
+- `Group stage` — one participant's group-stage bets.
+- `Knockout phase` — one participant's knockout-phase bets.
 
-New API endpoint:
+API endpoint:
 
 - `/.netlify/functions/participant?participant=PARTICIPANT_KEY&phase=group`
 - `/.netlify/functions/participant?participant=PARTICIPANT_KEY&phase=knockout`
 
-No Supabase schema change is required for this version. Replace the changed files in GitHub and redeploy Netlify.
+No Supabase schema change is required for this version. Replace the changed files in GitHub and delete the old `public/knockouts.html` and `public/knockouts.js` files if they exist.
 
 ---
 
@@ -28,8 +27,7 @@ No Supabase schema change is required for this version. Replace the changed file
 
 - `public/` — mobile website
 - `public/admin.html` — manual sync page
-- `public/participant.html` — participant detail page with group/knockout tabs
-- `public/knockouts.html` — knockout-phase participant selector
+- `public/participant.html` — participant detail page with Group stage / Knockout phase buttons
 - `netlify/functions/leaderboard.mjs` — public leaderboard API, group-stage by default
 - `netlify/functions/participant.mjs` — public participant bets API
 - `netlify/functions/sync.mjs` — scheduled sync every 5 minutes

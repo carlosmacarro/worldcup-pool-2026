@@ -75,9 +75,8 @@ function renderParticipants(rows) {
     item.innerHTML = `
       <a class="participant-main" href="/participant.html?participant=${encodeURIComponent(row.participantKey)}&phase=group">
         <strong>${escapeHtml(row.name)}</strong>
-        <span>Group bets · ${row.total ?? 0} pts · ${row.played ?? 0} scored</span>
+        <span>Open bets · Group: ${row.total ?? 0} pts · ${row.played ?? 0} scored</span>
       </a>
-      <a class="small-link" href="/participant.html?participant=${encodeURIComponent(row.participantKey)}&phase=knockout">Knockout bets</a>
     `;
     elements.participants.appendChild(item);
   }

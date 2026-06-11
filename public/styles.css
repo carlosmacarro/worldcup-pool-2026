@@ -385,8 +385,14 @@ input {
   gap: 12px;
 }
 
+.participant-card:has(.participant-main:hover),
+.participant-card:has(.participant-main:focus-visible) {
+  border-color: rgba(56, 189, 248, 0.48);
+}
+
 .participant-main {
   min-width: 0;
+  width: 100%;
   display: grid;
   gap: 4px;
   color: #f8fafc;
