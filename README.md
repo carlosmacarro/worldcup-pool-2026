@@ -247,3 +247,20 @@ Check that:
 ### Predictions are wrong or missing
 
 The parser expects the same Excel layout as your uploaded file. If a friend changes the structure of the workbook, ask them to use the original template again.
+
+## Admin sync timeout fix
+
+The admin page now starts the manual sync as a Netlify Background Function and polls the latest sync log from Supabase.
+This avoids browser JSON errors caused by Netlify returning an HTML timeout page when many Excel files are downloaded from Drive.
+
+New/updated files for this change:
+
+```text
+public/admin.html
+netlify/functions/sync-start.mjs
+netlify/functions/sync-status.mjs
+netlify/functions/sync-background.mjs
+package.json
+```
+
+After deploying these files, open `/admin.html`, paste `ADMIN_SECRET`, and click **Run sync**. The page will show the latest sync status from the `sync_logs` table.

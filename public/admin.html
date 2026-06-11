@@ -21,29 +21,138 @@
         <label for="secret">ADMIN_SECRET</label>
         <input id="secret" type="password" autocomplete="current-password" placeholder="Paste your admin secret" />
         <button id="syncBtn" class="primary-button" type="button">Run sync</button>
+        <button id="statusBtn" class="ghost-button" type="button">Check last sync</button>
         <pre id="output" class="output">Ready.</pre>
       </section>
     </main>
 
     <script type="module">
       const btn = document.querySelector('#syncBtn');
+      const statusBtn = document.querySelector('#statusBtn');
       const secret = document.querySelector('#secret');
       const output = document.querySelector('#output');
+      let pollTimer = null;
+
+      function getSecret() {
+        return secret.value.trim();
+      }
+
+      async function readResponse(response) {
+        const text = await response.text();
+        const contentType = response.headers.get('content-type') || '';
+
+        if (contentType.includes('application/json')) {
+          try {
+            return { json: JSON.parse(text), text };
+          } catch (error) {
+            return { json: null, text: `JSON parse failed: ${error.message}\n\n${text}` };
+          }
+        }
+
+        try {
+          return { json: JSON.parse(text), text };
+        } catch {
+          const cleaned = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+          return {
+            json: null,
+            text: [
+              `HTTP ${response.status} ${response.statusText}`,
+              'Netlify returned HTML instead of JSON. This usually means the function crashed, timed out, or the function URL was not deployed.',
+              cleaned ? `Response preview: ${cleaned.slice(0, 1500)}` : ''
+            ].filter(Boolean).join('\n\n')
+          };
+        }
+      }
+
+      function formatLog(log) {
+        if (!log) return 'No sync log found yet.';
+        const lines = [];
+        lines.push(`Started: ${log.started_at}`);
+        lines.push(`Finished: ${log.finished_at || 'still running…'}`);
+        lines.push(`Status: ${log.finished_at ? (log.ok ? 'OK' : 'FAILED') : 'RUNNING'}`);
+        if (log.participants_count != null) lines.push(`Participants: ${log.participants_count}`);
+        if (log.predictions_count != null) lines.push(`Predictions: ${log.predictions_count}`);
+        if (log.matches_count != null) lines.push(`Matches: ${log.matches_count}`);
+        if (log.error) lines.push(`Error: ${log.error}`);
+        if (Array.isArray(log.warnings) && log.warnings.length) {
+          lines.push('Warnings:');
+          for (const warning of log.warnings.slice(0, 20)) {
+            lines.push(`- ${warning.file ? `${warning.file}: ` : ''}${warning.message || JSON.stringify(warning)}`);
+          }
+          if (log.warnings.length > 20) lines.push(`- ...and ${log.warnings.length - 20} more warnings`);
+        }
+        return lines.join('\n');
+      }
+
+      async function fetchJsonOrShow(url, options = {}) {
+        const response = await fetch(url, options);
+        const parsed = await readResponse(response);
+        if (!parsed.json) throw new Error(parsed.text);
+        return parsed.json;
+      }
+
+      async function checkStatus(since = '') {
+        const params = new URLSearchParams();
+        if (since) params.set('since', since);
+        const data = await fetchJsonOrShow(`/.netlify/functions/sync-status?${params}`, {
+          headers: { 'x-admin-secret': getSecret() }
+        });
+
+        if (!data.ok) throw new Error(data.error || 'Could not read sync status.');
+        return data;
+      }
+
+      function startPolling(since) {
+        if (pollTimer) clearInterval(pollTimer);
+
+        pollTimer = setInterval(async () => {
+          try {
+            const status = await checkStatus(since);
+            output.textContent = `Sync status:\n\n${formatLog(status.latest)}`;
+
+            if (status.latest?.finished_at) {
+              clearInterval(pollTimer);
+              pollTimer = null;
+              btn.disabled = false;
+            }
+          } catch (error) {
+            output.textContent = error.message || String(error);
+            clearInterval(pollTimer);
+            pollTimer = null;
+            btn.disabled = false;
+          }
+        }, 3000);
+      }
 
       btn.addEventListener('click', async () => {
         btn.disabled = true;
-        output.textContent = 'Syncing…';
+        output.textContent = 'Starting background sync…';
+
         try {
-          const response = await fetch('/.netlify/functions/sync-now', {
+          const data = await fetchJsonOrShow('/.netlify/functions/sync-start', {
             method: 'POST',
-            headers: { 'x-admin-secret': secret.value.trim() }
+            headers: { 'x-admin-secret': getSecret() }
           });
-          const data = await response.json();
-          output.textContent = JSON.stringify(data, null, 2);
+
+          if (!data.ok) throw new Error(data.error || 'Could not start sync.');
+          output.textContent = `${data.message}\n\nChecking status…`;
+          startPolling(data.startedAt);
+        } catch (error) {
+          output.textContent = error.message || String(error);
+          btn.disabled = false;
+        }
+      });
+
+      statusBtn.addEventListener('click', async () => {
+        statusBtn.disabled = true;
+        output.textContent = 'Checking last sync…';
+        try {
+          const status = await checkStatus();
+          output.textContent = `Last sync:\n\n${formatLog(status.latest)}`;
         } catch (error) {
           output.textContent = error.message || String(error);
         } finally {
-          btn.disabled = false;
+          statusBtn.disabled = false;
         }
       });
     </script>
