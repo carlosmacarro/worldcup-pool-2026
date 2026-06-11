@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>World Cup Pool Admin</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell compact">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Admin</p>
+          <h1>Sync now</h1>
+          <p class="subtitle">Use this after adding Excel files or changing settings.</p>
+        </div>
+      </header>
+
+      <section class="panel admin-panel">
+        <label for="secret">ADMIN_SECRET</label>
+        <input id="secret" type="password" autocomplete="current-password" placeholder="Paste your admin secret" />
+        <button id="syncBtn" class="primary-button" type="button">Run sync</button>
+        <pre id="output" class="output">Ready.</pre>
+      </section>
+    </main>
+
+    <script type="module">
+      const btn = document.querySelector('#syncBtn');
+      const secret = document.querySelector('#secret');
+      const output = document.querySelector('#output');
+
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        output.textContent = 'Syncing…';
+        try {
+          const response = await fetch('/.netlify/functions/sync-now', {
+            method: 'POST',
+            headers: { 'x-admin-secret': secret.value.trim() }
+          });
+          const data = await response.json();
+          output.textContent = JSON.stringify(data, null, 2);
+        } catch (error) {
+          output.textContent = error.message || String(error);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    </script>
+  </body>
+</html>

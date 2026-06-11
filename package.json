@@ -1,0 +1,23 @@
+{
+  "name": "worldcup-pool-netlify",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "netlify dev",
+    "check": "node --check netlify/functions/leaderboard.mjs && node --check netlify/functions/sync-now.mjs && node --check netlify/functions/sync.mjs",
+    "deploy": "netlify deploy --prod"
+  },
+  "dependencies": {
+    "@netlify/functions": "^3.1.10",
+    "@supabase/supabase-js": "^2.49.8",
+    "googleapis": "^144.0.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "netlify-cli": "^17.38.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

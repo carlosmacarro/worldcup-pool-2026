@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>World Cup Pool</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">World Cup 2026</p>
+          <h1>Friends Pool</h1>
+          <p class="subtitle">Live leaderboard from everyone’s Excel predictions.</p>
+        </div>
+        <button id="refreshBtn" class="ghost-button" type="button">Refresh</button>
+      </header>
+
+      <section id="status" class="status-card">Loading leaderboard…</section>
+
+      <section class="stats-grid" aria-label="Tournament summary">
+        <article class="stat-card">
+          <span class="stat-label">Participants</span>
+          <strong id="participantsCount">–</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Scored matches</span>
+          <strong id="scoredMatchesCount">–</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Predictions</span>
+          <strong id="predictionsCount">–</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Leaderboard</h2>
+          <p id="lastUpdated">Waiting for first sync</p>
+        </div>
+        <div id="leaderboard" class="leaderboard"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2>Latest matches</h2>
+          <p>Final or live scores used by the app</p>
+        </div>
+        <div id="matches" class="matches"></div>
+      </section>
+    </main>
+
+    <template id="leaderTemplate">
+      <article class="leader-card">
+        <div class="rank"></div>
+        <div class="leader-main">
+          <div class="leader-topline">
+            <h3></h3>
+            <strong class="points"></strong>
+          </div>
+          <div class="pill-row">
+            <span class="pill exact"></span>
+            <span class="pill diff"></span>
+            <span class="pill winner"></span>
+            <span class="pill miss"></span>
+          </div>
+        </div>
+      </article>
+    </template>
+
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
