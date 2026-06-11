@@ -93,7 +93,7 @@ async function loadParticipant() {
     if (!response.ok || data.error) throw new Error(data.error || 'Could not load participant');
 
     elements.participantName.textContent = data.participant.name;
-    elements.participantSubtitle.textContent = `${data.phaseLabel} bets from ${data.participant.fileName || 'Excel file'}.`;
+    elements.participantSubtitle.textContent = '';
     elements.betsTitle.textContent = data.phaseLabel;
     elements.lastUpdated.textContent = data.lastSync?.finishedAt ? `Last sync: ${formatDate(data.lastSync.finishedAt)}` : 'Waiting for first sync';
     elements.totalPoints.textContent = data.summary.total;
