@@ -1,4 +1,5 @@
 import { getConfig } from './config.mjs';
+import { normaliseTeam } from './normalise.mjs';
 
 function scoreValue(scoreObj, key) {
   if (!scoreObj) return null;
@@ -50,7 +51,6 @@ export async function fetchFootballDataMatches() {
   return payload.matches || [];
 }
 
-
 function parseOverrides() {
   if (!process.env.MATCH_API_ID_OVERRIDES) return {};
   try {
@@ -61,56 +61,174 @@ function parseOverrides() {
   }
 }
 
-function convertMatch(match, matchNo, countLiveMatches) {
+function apiHomeTeam(match) {
+  return match.homeTeam?.name || match.homeTeam?.shortName || null;
+}
+
+function apiAwayTeam(match) {
+  return match.awayTeam?.name || match.awayTeam?.shortName || null;
+}
+
+function pairKey(homeTeam, awayTeam) {
+  const home = normaliseTeam(homeTeam);
+  const away = normaliseTeam(awayTeam);
+  if (!home || !away) return null;
+  return `${home}__${away}`;
+}
+
+function unorderedPairKey(homeTeam, awayTeam) {
+  const teams = [normaliseTeam(homeTeam), normaliseTeam(awayTeam)].filter(Boolean).sort();
+  if (teams.length !== 2) return null;
+  return teams.join('__');
+}
+
+function inferFlip(match, fixture) {
+  if (!fixture) return false;
+  const apiKey = pairKey(apiHomeTeam(match), apiAwayTeam(match));
+  const fixtureKey = pairKey(fixture.home_team, fixture.away_team);
+  const reversedFixtureKey = pairKey(fixture.away_team, fixture.home_team);
+  if (apiKey && reversedFixtureKey && apiKey === reversedFixtureKey) return true;
+  if (apiKey && fixtureKey && apiKey === fixtureKey) return false;
+  return false;
+}
+
+function convertMatch(match, matchNo, countLiveMatches, { fixture = null, flip = false } = {}) {
   const score = pickScore(match);
   const status = match.status || 'UNKNOWN';
   const isFinished = status === 'FINISHED';
   const isLive = ['IN_PLAY', 'LIVE', 'PAUSED'].includes(status);
   const hasScore = Number.isFinite(score.home) && Number.isFinite(score.away);
+  const shouldFlip = flip || inferFlip(match, fixture);
 
   return {
     match_no: matchNo,
     api_id: match.id ? String(match.id) : null,
-    kickoff: match.utcDate || null,
+    kickoff: match.utcDate || fixture?.kickoff || null,
     status,
-    stage: match.stage || null,
-    group_name: match.group || null,
-    home_team: match.homeTeam?.name || match.homeTeam?.shortName || null,
-    away_team: match.awayTeam?.name || match.awayTeam?.shortName || null,
-    real_home: hasScore ? score.home : null,
-    real_away: hasScore ? score.away : null,
+    stage: match.stage || fixture?.stage || null,
+    group_name: match.group || fixture?.group_name || null,
+    // Store teams in the same home/away orientation as the Excel template.
+    // This is important because predictions are also stored in Excel orientation.
+    home_team: fixture?.home_team || (shouldFlip ? apiAwayTeam(match) : apiHomeTeam(match)),
+    away_team: fixture?.away_team || (shouldFlip ? apiHomeTeam(match) : apiAwayTeam(match)),
+    real_home: hasScore ? (shouldFlip ? score.away : score.home) : null,
+    real_away: hasScore ? (shouldFlip ? score.home : score.away) : null,
     score_source: score.source,
     is_scorable: hasScore && (isFinished || (countLiveMatches && isLive)),
     updated_at: new Date().toISOString()
   };
 }
 
-export function mapFootballDataMatches(apiMatches, { countLiveMatches = false } = {}) {
-  const sorted = [...apiMatches].sort((a, b) => {
+function convertFixtureOnly(fixture) {
+  return {
+    match_no: fixture.match_no,
+    api_id: null,
+    kickoff: fixture.kickoff || null,
+    status: 'SCHEDULED',
+    stage: fixture.stage || 'GROUP_STAGE',
+    group_name: fixture.group_name || null,
+    home_team: fixture.home_team,
+    away_team: fixture.away_team,
+    real_home: null,
+    real_away: null,
+    score_source: null,
+    is_scorable: false,
+    updated_at: new Date().toISOString()
+  };
+}
+
+function buildApiIndexes(apiMatches) {
+  const byOrderedPair = new Map();
+  const byUnorderedPair = new Map();
+
+  for (const match of apiMatches) {
+    const ordered = pairKey(apiHomeTeam(match), apiAwayTeam(match));
+    const unordered = unorderedPairKey(apiHomeTeam(match), apiAwayTeam(match));
+    if (ordered) {
+      if (!byOrderedPair.has(ordered)) byOrderedPair.set(ordered, []);
+      byOrderedPair.get(ordered).push(match);
+    }
+    if (unordered) {
+      if (!byUnorderedPair.has(unordered)) byUnorderedPair.set(unordered, []);
+      byUnorderedPair.get(unordered).push(match);
+    }
+  }
+
+  return { byOrderedPair, byUnorderedPair };
+}
+
+function findUnusedCandidate(candidates = [], usedApiIds) {
+  return candidates.find((match) => !usedApiIds.has(String(match.id)));
+}
+
+function sortMatchesChronologically(apiMatches) {
+  return [...apiMatches].sort((a, b) => {
     const da = new Date(a.utcDate || 0).getTime();
     const db = new Date(b.utcDate || 0).getTime();
     if (da !== db) return da - db;
     return Number(a.id || 0) - Number(b.id || 0);
   });
+}
 
-  // football-data.org does not expose FIFA match numbers directly.
-  // By default this maps match #1..#104 by chronological order.
-  // If needed, set MATCH_API_ID_OVERRIDES='{"1":"123456"}' in Netlify env vars.
-  const overrides = parseOverrides();
+export function mapFootballDataMatches(apiMatches, { countLiveMatches = false, excelFixtures = [] } = {}) {
+  const sorted = sortMatchesChronologically(apiMatches);
+  const fixtures = [...excelFixtures]
+    .filter((fixture) => Number.isInteger(Number(fixture.match_no)) && fixture.home_team && fixture.away_team)
+    .map((fixture) => ({ ...fixture, match_no: Number(fixture.match_no) }))
+    .sort((a, b) => a.match_no - b.match_no);
+
   const rowsByMatchNo = new Map();
   const usedApiIds = new Set();
+  const apiIndexes = buildApiIndexes(sorted);
 
+  // Reserve Excel group-stage fixtures before doing any fallback chronological mapping.
+  // If an API match cannot be matched, the row remains pending instead of being incorrectly scored.
+  for (const fixture of fixtures) {
+    rowsByMatchNo.set(fixture.match_no, convertFixtureOnly(fixture));
+  }
+
+  // Optional exact overrides still win, but the resulting row is aligned to Excel teams.
+  const overrides = parseOverrides();
   for (const [matchNoRaw, apiIdRaw] of Object.entries(overrides)) {
     const matchNo = Number(matchNoRaw);
     const apiId = String(apiIdRaw);
     const match = sorted.find((m) => String(m.id) === apiId);
-    if (Number.isInteger(matchNo) && match) {
-      rowsByMatchNo.set(matchNo, convertMatch(match, matchNo, countLiveMatches));
-      usedApiIds.add(apiId);
-    }
+    if (!Number.isInteger(matchNo) || !match) continue;
+    const fixture = fixtures.find((item) => item.match_no === matchNo) || null;
+    rowsByMatchNo.set(matchNo, convertMatch(match, matchNo, countLiveMatches, { fixture }));
+    usedApiIds.add(apiId);
   }
 
-  let nextMatchNo = 1;
+  // Map group-stage API results by home/away team names, not by row/date order.
+  // The Excel template match numbers are not strictly chronological, so chronological mapping can shift results.
+  for (const fixture of fixtures) {
+    if (rowsByMatchNo.get(fixture.match_no)?.api_id) continue;
+
+    const ordered = pairKey(fixture.home_team, fixture.away_team);
+    const reversed = pairKey(fixture.away_team, fixture.home_team);
+    const unordered = unorderedPairKey(fixture.home_team, fixture.away_team);
+
+    let match = findUnusedCandidate(apiIndexes.byOrderedPair.get(ordered), usedApiIds);
+    let flip = false;
+
+    if (!match) {
+      match = findUnusedCandidate(apiIndexes.byOrderedPair.get(reversed), usedApiIds);
+      flip = Boolean(match);
+    }
+
+    if (!match) {
+      match = findUnusedCandidate(apiIndexes.byUnorderedPair.get(unordered), usedApiIds);
+      flip = inferFlip(match, fixture);
+    }
+
+    if (!match) continue;
+    rowsByMatchNo.set(fixture.match_no, convertMatch(match, fixture.match_no, countLiveMatches, { fixture, flip }));
+    usedApiIds.add(String(match.id));
+  }
+
+  // Keep the remaining API matches, mostly knockout matches. Start after the reserved Excel fixtures.
+  // This avoids dropping a leftover API row into a group-stage match number and corrupting group scoring.
+  let nextMatchNo = Math.max(0, ...fixtures.map((fixture) => fixture.match_no)) + 1;
   for (const match of sorted) {
     if (usedApiIds.has(String(match.id))) continue;
     while (rowsByMatchNo.has(nextMatchNo)) nextMatchNo += 1;

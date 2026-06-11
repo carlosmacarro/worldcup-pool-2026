@@ -3,6 +3,7 @@ import { listExcelFilesInDriveFolder, downloadDriveFileBuffer } from './googleDr
 import { parsePredictionsFromExcelBuffer } from './xlsxParser.mjs';
 import { fetchFootballDataMatches, mapFootballDataMatches } from './footballData.mjs';
 import { getConfig } from './config.mjs';
+import { isPhaseMatch } from './phases.mjs';
 
 const CHUNK_SIZE = 500;
 
@@ -61,6 +62,29 @@ function disambiguateParticipantKeys(parsedFiles, warnings) {
   }
 }
 
+
+function buildExcelFixturesFromParsedFiles(parsedFiles) {
+  const fixturesByMatchNo = new Map();
+
+  for (const parsed of parsedFiles) {
+    for (const prediction of parsed.predictions || []) {
+      if (!isPhaseMatch(prediction, 'group')) continue;
+      if (fixturesByMatchNo.has(prediction.match_no)) continue;
+      fixturesByMatchNo.set(prediction.match_no, {
+        match_no: prediction.match_no,
+        kickoff: prediction.kickoff,
+        round_label: prediction.round_label,
+        stage: 'GROUP_STAGE',
+        group_name: null,
+        home_team: prediction.home_team,
+        away_team: prediction.away_team
+      });
+    }
+  }
+
+  return [...fixturesByMatchNo.values()].sort((a, b) => a.match_no - b.match_no);
+}
+
 async function syncPredictionsFromDrive(supabase, warnings) {
   const files = await listExcelFilesInDriveFolder();
   if (!files.length) warnings.push({ message: 'No Excel files found in Google Drive folder.' });
@@ -108,14 +132,18 @@ async function syncPredictionsFromDrive(supabase, warnings) {
 
   return {
     participantsCount: participants.length,
-    predictionsCount: parsedFiles.reduce((sum, p) => sum + p.predictions.length, 0)
+    predictionsCount: parsedFiles.reduce((sum, p) => sum + p.predictions.length, 0),
+    excelFixtures: buildExcelFixturesFromParsedFiles(parsedFiles)
   };
 }
 
-async function syncMatchesFromFootballData(supabase) {
+async function syncMatchesFromFootballData(supabase, excelFixtures = []) {
   const cfg = getConfig();
   const apiMatches = await fetchFootballDataMatches();
-  const mappedMatches = mapFootballDataMatches(apiMatches, { countLiveMatches: cfg.countLiveMatches });
+  const mappedMatches = mapFootballDataMatches(apiMatches, {
+    countLiveMatches: cfg.countLiveMatches,
+    excelFixtures
+  });
   await upsertChunked(supabase, 'matches', mappedMatches, 'match_no');
   return { matchesCount: mappedMatches.length };
 }
@@ -128,12 +156,13 @@ export async function runSync({ source = 'manual' } = {}) {
   try {
     logId = await insertLog(supabase, source);
     const predictionStats = await syncPredictionsFromDrive(supabase, warnings);
-    const matchStats = await syncMatchesFromFootballData(supabase);
+    const matchStats = await syncMatchesFromFootballData(supabase, predictionStats.excelFixtures || []);
+    const { excelFixtures, ...publicPredictionStats } = predictionStats;
 
     const result = {
       ok: true,
       source,
-      ...predictionStats,
+      ...publicPredictionStats,
       ...matchStats,
       warnings,
       finishedAt: new Date().toISOString()

@@ -68,10 +68,12 @@ function applyPredictionToParticipant(participant, prediction, match) {
     matchNo: prediction.match_no,
     phase: phaseForMatchLike({ ...prediction, stage: match?.stage }),
     roundLabel: prediction.round_label || null,
-    kickoff: match?.kickoff || prediction.kickoff,
+    kickoff: prediction.kickoff || match?.kickoff,
     status: match?.status || 'PENDING',
-    homeTeam: match?.home_team || prediction.home_team,
-    awayTeam: match?.away_team || prediction.away_team,
+    // Participant detail pages should always show the teams as they appear in the user's Excel bet.
+    // Match rows are still used for actual scores and points.
+    homeTeam: prediction.home_team || match?.home_team,
+    awayTeam: prediction.away_team || match?.away_team,
     predicted: { home: prediction.pred_home, away: prediction.pred_away },
     actual: {
       home: match?.real_home ?? null,

@@ -264,3 +264,11 @@ package.json
 ```
 
 After deploying these files, open `/admin.html`, paste `ADMIN_SECRET`, and click **Run sync**. The page will show the latest sync status from the `sync_logs` table.
+
+---
+
+## Fix: Excel match numbers vs API match order
+
+This version maps group-stage results from football-data.org to the Excel template by normalized home/away team names instead of simple chronological order. This prevents rows such as Australia–Turkey, Germany–Curaçao, and Netherlands–Japan from being shifted when the API order does not match the Excel match numbers.
+
+After deploying this fix, run a manual sync from `/admin.html` so the `matches` table is rewritten with the corrected match mapping.
