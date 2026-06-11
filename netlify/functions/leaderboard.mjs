@@ -1,11 +1,13 @@
-import { jsonResponse, isOptions } from './_lib/http.mjs';
+import { jsonResponse, getRequestUrl, isOptions } from './_lib/http.mjs';
 import { buildLeaderboard } from './_lib/leaderboardBuilder.mjs';
 
 export default async function handler(req) {
   if (isOptions(req)) return jsonResponse({ ok: true });
 
   try {
-    const data = await buildLeaderboard();
+    const url = getRequestUrl(req);
+    const phase = url.searchParams.get('phase') || 'group';
+    const data = await buildLeaderboard({ phase });
     return jsonResponse(data);
   } catch (error) {
     console.error(error);

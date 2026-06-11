@@ -4,11 +4,34 @@ This is a free-friendly mobile web app for your World Cup betting pool.
 
 It reads every friend's Excel file from a Google Drive folder, fetches World Cup 2026 results from football-data.org, calculates points, and shows a phone-friendly leaderboard.
 
+
+## New in this version: participants and phase pages
+
+The homepage now shows a group-stage leaderboard only. Group-stage bets are identified as match numbers `1` to `72` and/or Excel round labels `J1`, `J2`, `J3`.
+
+New pages:
+
+- `/participant.html?participant=PARTICIPANT_KEY&phase=group` — one participant's group-stage bets.
+- `/participant.html?participant=PARTICIPANT_KEY&phase=knockout` — one participant's knockout-phase bets.
+- `/knockouts.html` — participant selector for knockout-phase bets.
+
+New API endpoint:
+
+- `/.netlify/functions/participant?participant=PARTICIPANT_KEY&phase=group`
+- `/.netlify/functions/participant?participant=PARTICIPANT_KEY&phase=knockout`
+
+No Supabase schema change is required for this version. Replace the changed files in GitHub and redeploy Netlify.
+
+---
+
 ## What is included
 
 - `public/` — mobile website
 - `public/admin.html` — manual sync page
-- `netlify/functions/leaderboard.mjs` — public leaderboard API
+- `public/participant.html` — participant detail page with group/knockout tabs
+- `public/knockouts.html` — knockout-phase participant selector
+- `netlify/functions/leaderboard.mjs` — public leaderboard API, group-stage by default
+- `netlify/functions/participant.mjs` — public participant bets API
 - `netlify/functions/sync.mjs` — scheduled sync every 5 minutes
 - `netlify/functions/sync-now.mjs` — manual sync endpoint
 - `supabase_schema.sql` — database tables

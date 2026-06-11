@@ -316,3 +316,136 @@ input {
   .match-card { grid-template-columns: 2.5rem 1fr; }
   .match-status { grid-column: 2; text-align: left; }
 }
+
+.tab-bar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 14px;
+}
+
+.tab-button,
+.tab-link {
+  appearance: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: rgba(15,23,42,0.76);
+  color: #f8fafc;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 10px 14px;
+  text-decoration: none;
+  font: inherit;
+}
+
+.tab-button.active,
+.tab-link.active {
+  border-color: rgba(56, 189, 248, 0.5);
+  background: rgba(56, 189, 248, 0.16);
+  color: #e0f2fe;
+}
+
+.link-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
+.leader-card {
+  cursor: pointer;
+  transition: transform 120ms ease, border-color 120ms ease;
+}
+
+.leader-card:hover,
+.leader-card:focus-visible {
+  border-color: rgba(56, 189, 248, 0.48);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.participants-list,
+.bets-list {
+  display: grid;
+  gap: 10px;
+}
+
+.participant-card,
+.bet-card {
+  border: 1px solid var(--border);
+  background: rgba(15, 23, 42, 0.72);
+  border-radius: 18px;
+  padding: 12px;
+}
+
+.participant-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.participant-main {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: #f8fafc;
+  text-decoration: none;
+}
+
+.participant-main strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.participant-main span,
+.small-link,
+.bet-meta {
+  color: var(--text-soft);
+  font-size: 0.82rem;
+}
+
+.small-link {
+  flex: 0 0 auto;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 8px 10px;
+}
+
+.bet-card {
+  display: grid;
+  gap: 8px;
+}
+
+.bet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.bet-teams {
+  font-size: 1rem;
+  line-height: 1.35;
+}
+
+.bet-teams strong {
+  color: #f8fafc;
+  font-size: 1.14rem;
+  white-space: nowrap;
+}
+
+.bet-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+@media (max-width: 620px) {
+  .hero { flex-direction: column; }
+  .ghost-button { align-self: flex-start; }
+  .participant-card { align-items: flex-start; }
+  .small-link { white-space: nowrap; }
+}

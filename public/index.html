@@ -4,51 +4,69 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0f172a" />
-    <title>La Gran Porra</title>
+    <title>World Cup Pool</title>
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="app-shell">
       <header class="hero">
         <div>
-          <p class="eyebrow">MUNDIAL 2026</p>
-          <h1>La Gran Porra</h1>
-          <p class="subtitle">Clasificación en vivo y en directo</p>
+          <p class="eyebrow">World Cup 2026</p>
+          <h1>Friends Pool</h1>
+          <p class="subtitle">Group-stage leaderboard from everyone’s Excel predictions.</p>
         </div>
-        <button id="refreshBtn" class="ghost-button" type="button">Recargar</button>
+        <button id="refreshBtn" class="ghost-button" type="button">Refresh</button>
       </header>
+
+      <nav class="tab-bar" aria-label="Main sections">
+        <button class="tab-button active" type="button" data-tab="leaderboardTab">Leaderboard</button>
+        <button class="tab-button" type="button" data-tab="participantsTab">Participants</button>
+        <a class="tab-link" href="/knockouts.html">Knockout bets</a>
+      </nav>
 
       <section id="status" class="status-card">Loading leaderboard…</section>
 
       <section class="stats-grid" aria-label="Tournament summary">
         <article class="stat-card">
-          <span class="stat-label">Participantes</span>
+          <span class="stat-label">Participants</span>
           <strong id="participantsCount">–</strong>
         </article>
         <article class="stat-card">
-          <span class="stat-label">Partidos finalizados</span>
+          <span class="stat-label">Group matches scored</span>
           <strong id="scoredMatchesCount">–</strong>
         </article>
         <article class="stat-card">
-          <span class="stat-label">Predicciones</span>
+          <span class="stat-label">Group predictions</span>
           <strong id="predictionsCount">–</strong>
         </article>
       </section>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Clasificación</h2>
-          <p id="lastUpdated">Waiting for first sync</p>
-        </div>
-        <div id="leaderboard" class="leaderboard"></div>
+      <section id="leaderboardTab" class="tab-panel">
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Group-stage leaderboard</h2>
+            <p id="lastUpdated">Waiting for first sync</p>
+          </div>
+          <div id="leaderboard" class="leaderboard"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Latest group matches</h2>
+            <p>Only group-stage results are scored here</p>
+          </div>
+          <div id="matches" class="matches"></div>
+        </section>
       </section>
 
-      <section class="panel">
-        <div class="panel-header">
-          <h2>Últimos partidos</h2>
-          <p>Resultados finales o en vivo</p>
-        </div>
-        <div id="matches" class="matches"></div>
+      <section id="participantsTab" class="tab-panel" hidden>
+        <section class="panel">
+          <div class="panel-header">
+            <h2>Participants</h2>
+            <p>Tap a name to see their bets</p>
+          </div>
+          <div id="participants" class="participants-list"></div>
+        </section>
       </section>
     </main>
 

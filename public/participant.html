@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Participant Bets · World Cup Pool</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Participant bets</p>
+          <h1 id="participantName">Loading…</h1>
+          <p id="participantSubtitle" class="subtitle">Group-stage and knockout predictions.</p>
+        </div>
+        <a class="ghost-button link-button" href="/">Home</a>
+      </header>
+
+      <nav class="tab-bar" aria-label="Bet phases">
+        <a id="groupLink" class="tab-link" href="#">Group stage</a>
+        <a id="knockoutLink" class="tab-link" href="#">Knockout phase</a>
+        <a class="tab-link" href="/knockouts.html">All knockout bets</a>
+      </nav>
+
+      <section id="status" class="status-card">Loading bets…</section>
+
+      <section class="stats-grid" aria-label="Participant summary">
+        <article class="stat-card">
+          <span class="stat-label">Points</span>
+          <strong id="totalPoints">–</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Scored bets</span>
+          <strong id="playedBets">–</strong>
+        </article>
+        <article class="stat-card">
+          <span class="stat-label">Pending bets</span>
+          <strong id="pendingBets">–</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <h2 id="betsTitle">Bets</h2>
+          <p id="lastUpdated">Waiting for first sync</p>
+        </div>
+        <div id="bets" class="bets-list"></div>
+      </section>
+    </main>
+
+    <script src="/participant.js" type="module"></script>
+  </body>
+</html>
