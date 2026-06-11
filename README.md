@@ -288,3 +288,16 @@ This version fixes two issues reported after the first real match:
 - The result mapper now treats full-time/regular-time scores as scorable when the status is final-like, and it includes a `Türkiye` → `Turkey` alias so Australia–Türkiye/Turquía maps correctly.
 
 After deploying, run a manual sync from `/admin.html` so the corrected match mapping and points are written to Supabase.
+
+## Team name aliases
+
+The sync maps Spanish Excel team names and common API/FIFA variants to a canonical name before matching fixtures. For example:
+
+- `Corea del Sur`, `Korea Republic`, `Republic of Korea` → `SOUTH KOREA`
+- `Turquía`, `Türkiye`, `Turkey` → `TURKEY`
+- `Curazao`, `Curaçao`, `Curacao` → `CURACAO`
+- `RD Congo`, `DR Congo`, `Congo DR` → `DR CONGO`
+- `Costa de Marfil`, `Côte d'Ivoire`, `Ivory Coast` → `IVORY COAST`
+- `Irán`, `IR Iran`, `Iran` → `IRAN`
+
+If the API uses a new variant, add it in `netlify/functions/_lib/normalise.mjs`.
