@@ -118,16 +118,16 @@ function selectMatchesToShow(matches) {
 
   if (live.length) {
     return {
-      title: 'Live / next group matches',
-      subtitle: 'Live matches first, followed by the next scheduled group matches',
+      title: 'En vivo / próximos partidos',
+      subtitle: '',
       matches: [...live, ...upcoming].slice(0, MAX_MATCH_CARDS)
     };
   }
 
   if (upcoming.length) {
     return {
-      title: 'Next group matches',
-      subtitle: 'The following scheduled group-stage matches',
+      title: 'Próximos partidos',
+      subtitle: 'Actualmente no hay partidos en directo',
       matches: upcoming.slice(0, MAX_MATCH_CARDS)
     };
   }
@@ -137,8 +137,8 @@ function selectMatchesToShow(matches) {
     .sort((a, b) => byKickoffThenMatchNo(b, a));
 
   return {
-    title: 'Recent group results',
-    subtitle: 'All group matches appear to be finished, so showing the latest scored results',
+    title: 'Resultados recientes',
+    subtitle: 'Fase de grupos completada',
     matches: recentFinished.slice(0, MAX_MATCH_CARDS)
   };
 }
