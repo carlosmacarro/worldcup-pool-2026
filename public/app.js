@@ -150,8 +150,8 @@ function selectMatchesToShow(matches) {
 
   if (selected.length) {
     return {
-      title: 'Live / recent / next group matches',
-      subtitle: 'Live matches first, then recently finished matches, then the next scheduled matches',
+      title: 'En vivo / recientes / próximos partidos',
+      subtitle: '',
       matches: selected
     };
   }
@@ -161,8 +161,8 @@ function selectMatchesToShow(matches) {
     .sort((a, b) => byKickoffThenMatchNo(b, a));
 
   return {
-    title: 'Recent group results',
-    subtitle: 'No live or upcoming group matches found, so showing the latest scored results',
+    title: 'Reultados recientes',
+    subtitle: 'Fase de grupos finalizada',
     matches: recentFinished.slice(0, MAX_MATCH_CARDS)
   };
 }
