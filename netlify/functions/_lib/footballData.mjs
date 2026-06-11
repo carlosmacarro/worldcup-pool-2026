@@ -48,7 +48,9 @@ export async function fetchFootballDataMatches() {
     throw new Error(`football-data.org request failed: ${message}`);
   }
 
-  return payload.matches || [];
+  // The normal football-data.org shape is { matches: [...] }, but keep this defensive so
+  // an unexpected placeholder/error shape cannot crash the importer later.
+  return Array.isArray(payload?.matches) ? payload.matches.filter(Boolean) : [];
 }
 
 function parseOverrides() {
@@ -61,12 +63,26 @@ function parseOverrides() {
   }
 }
 
+function apiMatchId(match) {
+  return match?.id == null ? null : String(match.id);
+}
+
+function apiTeamName(team) {
+  if (!team) return null;
+  if (typeof team === 'string') return team;
+  return team.name || team.shortName || team.tla || null;
+}
+
 function apiHomeTeam(match) {
-  return match.homeTeam?.name || match.homeTeam?.shortName || null;
+  // football-data.org can return placeholder rows or unexpected objects while fixtures are still being finalized.
+  // Keep the sync running if a row is missing homeTeam.
+  return apiTeamName(match?.homeTeam);
 }
 
 function apiAwayTeam(match) {
-  return match.awayTeam?.name || match.awayTeam?.shortName || null;
+  // football-data.org can return placeholder rows or unexpected objects while fixtures are still being finalized.
+  // Keep the sync running if a row is missing awayTeam.
+  return apiTeamName(match?.awayTeam);
 }
 
 function pairKey(homeTeam, awayTeam) {
@@ -102,7 +118,7 @@ function convertMatch(match, matchNo, countLiveMatches, { fixture = null, flip =
 
   return {
     match_no: matchNo,
-    api_id: match.id ? String(match.id) : null,
+    api_id: apiMatchId(match),
     kickoff: match.utcDate || fixture?.kickoff || null,
     status,
     stage: match.stage || fixture?.stage || null,
@@ -158,15 +174,18 @@ function buildApiIndexes(apiMatches) {
 }
 
 function findUnusedCandidate(candidates = [], usedApiIds) {
-  return candidates.find((match) => !usedApiIds.has(String(match.id)));
+  return (candidates || []).find((match) => {
+    const id = apiMatchId(match);
+    return id && !usedApiIds.has(id);
+  });
 }
 
 function sortMatchesChronologically(apiMatches) {
-  return [...apiMatches].sort((a, b) => {
-    const da = new Date(a.utcDate || 0).getTime();
-    const db = new Date(b.utcDate || 0).getTime();
+  return [...(Array.isArray(apiMatches) ? apiMatches : [])].filter(Boolean).sort((a, b) => {
+    const da = new Date(a?.utcDate || 0).getTime();
+    const db = new Date(b?.utcDate || 0).getTime();
     if (da !== db) return da - db;
-    return Number(a.id || 0) - Number(b.id || 0);
+    return Number(apiMatchId(a) || 0) - Number(apiMatchId(b) || 0);
   });
 }
 
@@ -192,7 +211,7 @@ export function mapFootballDataMatches(apiMatches, { countLiveMatches = false, e
   for (const [matchNoRaw, apiIdRaw] of Object.entries(overrides)) {
     const matchNo = Number(matchNoRaw);
     const apiId = String(apiIdRaw);
-    const match = sorted.find((m) => String(m.id) === apiId);
+    const match = sorted.find((m) => apiMatchId(m) === apiId);
     if (!Number.isInteger(matchNo) || !match) continue;
     const fixture = fixtures.find((item) => item.match_no === matchNo) || null;
     rowsByMatchNo.set(matchNo, convertMatch(match, matchNo, countLiveMatches, { fixture }));
@@ -218,19 +237,23 @@ export function mapFootballDataMatches(apiMatches, { countLiveMatches = false, e
 
     if (!match) {
       match = findUnusedCandidate(apiIndexes.byUnorderedPair.get(unordered), usedApiIds);
-      flip = inferFlip(match, fixture);
+      flip = match ? inferFlip(match, fixture) : false;
     }
 
     if (!match) continue;
     rowsByMatchNo.set(fixture.match_no, convertMatch(match, fixture.match_no, countLiveMatches, { fixture, flip }));
-    usedApiIds.add(String(match.id));
+    {
+      const matchedId = apiMatchId(match);
+      if (matchedId) usedApiIds.add(matchedId);
+    }
   }
 
   // Keep the remaining API matches, mostly knockout matches. Start after the reserved Excel fixtures.
   // This avoids dropping a leftover API row into a group-stage match number and corrupting group scoring.
   let nextMatchNo = Math.max(0, ...fixtures.map((fixture) => fixture.match_no)) + 1;
   for (const match of sorted) {
-    if (usedApiIds.has(String(match.id))) continue;
+    const matchId = apiMatchId(match);
+    if (!matchId || usedApiIds.has(matchId)) continue;
     while (rowsByMatchNo.has(nextMatchNo)) nextMatchNo += 1;
     rowsByMatchNo.set(nextMatchNo, convertMatch(match, nextMatchNo, countLiveMatches));
     nextMatchNo += 1;

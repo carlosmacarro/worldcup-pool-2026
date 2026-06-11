@@ -181,7 +181,7 @@ export async function runSync({ source = 'manual' } = {}) {
     await updateLog(supabase, logId, {
       ok: false,
       warnings,
-      error: error.message || String(error)
+      error: error.stack || error.message || String(error)
     });
     throw error;
   }

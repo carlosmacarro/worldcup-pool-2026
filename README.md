@@ -272,3 +272,8 @@ After deploying these files, open `/admin.html`, paste `ADMIN_SECRET`, and click
 This version maps group-stage results from football-data.org to the Excel template by normalized home/away team names instead of simple chronological order. This prevents rows such as Australia–Turkey, Germany–Curaçao, and Netherlands–Japan from being shifted when the API order does not match the Excel match numbers.
 
 After deploying this fix, run a manual sync from `/admin.html` so the `matches` table is rewritten with the corrected match mapping.
+
+
+## 2026-06-11 API defensive mapping hotfix
+
+If the admin sync fails with `Cannot read properties of undefined (reading 'homeTeam')`, update `netlify/functions/_lib/footballData.mjs` from this package and redeploy. The importer now filters unexpected/empty API rows and reads team IDs/names defensively before mapping API results to Excel fixtures.
