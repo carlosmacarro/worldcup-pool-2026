@@ -301,3 +301,11 @@ The sync maps Spanish Excel team names and common API/FIFA variants to a canonic
 - `Irán`, `IR Iran`, `Iran` → `IRAN`
 
 If the API uses a new variant, add it in `netlify/functions/_lib/normalise.mjs`.
+
+## 2026-06 live leaderboard scoring fix
+
+This version fixes the case where the live/recent match card shows a score but the classification does not change.
+
+The leaderboard now scores a match whenever Supabase has a numeric real score and the match is final-like or live-like, even if an older sync stored `is_scorable=false`. The sync also treats live scores as provisional scoring by default, so the leaderboard updates during matches.
+
+After deploying these files, run a manual sync from `/admin.html`. If you already see scores in the match cards, the leaderboard should update immediately after redeploying, but running sync refreshes the `matches` table too.

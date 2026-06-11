@@ -2,6 +2,32 @@ import { fetchAll } from './db.mjs';
 import { scorePrediction, pointType } from './scoring.mjs';
 import { normalizePhase, getPhaseLabel, isPhaseMatch, phaseForMatchLike } from './phases.mjs';
 
+const LIVE_STATUSES = new Set(['IN_PLAY', 'LIVE', 'PAUSED']);
+const FINAL_STATUSES = new Set(['FINISHED', 'AWARDED', 'AFTER_EXTRA_TIME', 'PENALTY_SHOOTOUT']);
+const NOT_STARTED_STATUSES = new Set(['SCHEDULED', 'TIMED', 'POSTPONED', 'CANCELLED', 'CANCELED', 'SUSPENDED']);
+
+function hasNumericScore(match) {
+  return Number.isFinite(Number(match?.real_home)) && Number.isFinite(Number(match?.real_away));
+}
+
+function effectiveIsScorable(match) {
+  if (!match || !hasNumericScore(match)) return false;
+  if (match.is_scorable) return true;
+
+  const status = String(match.status || '').toUpperCase();
+
+  // Robust fallback: if the API has already stored a real score for a finished/final-like
+  // or live match, score it even if the older sync wrote is_scorable=false.
+  // This fixes cases where match cards show live/recent scores but the leaderboard remains pending.
+  if (FINAL_STATUSES.has(status) || LIVE_STATUSES.has(status)) return true;
+
+  // Some APIs briefly return a score with a generic/unknown status after kickoff.
+  // Count it unless the status clearly means the match has not started or was cancelled/postponed.
+  if (!NOT_STARTED_STATUSES.has(status)) return true;
+
+  return false;
+}
+
 function createParticipantSummary(participant, phase = 'group') {
   return {
     participantKey: participant.participant_key,
@@ -47,7 +73,7 @@ function latestSyncSummary(logs) {
 }
 
 function applyPredictionToParticipant(participant, prediction, match) {
-  const isScorable = Boolean(match?.is_scorable);
+  const isScorable = effectiveIsScorable(match);
   let points = 0;
   let type = 'pending';
 
@@ -100,7 +126,7 @@ function matchDto(match) {
     awayTeam: match.away_team,
     realHome: match.real_home,
     realAway: match.real_away,
-    isScorable: match.is_scorable
+    isScorable: effectiveIsScorable(match)
   };
 }
 
@@ -167,8 +193,8 @@ export async function buildLeaderboard({ phase = 'group' } = {}) {
       participants: participants.length,
       predictions: predictions.filter((p) => isPhaseMatch({ ...p, stage: matchMap.get(p.match_no)?.stage }, selectedPhase)).length,
       matches: filteredMatches.length,
-      scorableMatches: filteredMatches.filter((m) => m.is_scorable).length,
-      finishedMatches: filteredMatches.filter((m) => m.status === 'FINISHED').length
+      scorableMatches: filteredMatches.filter(effectiveIsScorable).length,
+      finishedMatches: filteredMatches.filter((m) => String(m.status || '').toUpperCase() === 'FINISHED').length
     },
     participants: buildParticipantsList(participants, leaderboardByKey),
     matches: filteredMatches.map(matchDto),

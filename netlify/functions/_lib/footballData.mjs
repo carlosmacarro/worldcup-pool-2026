@@ -49,7 +49,14 @@ function isClearlyNotScorableStatus(status) {
 function isMatchScorable({ status, scoreSource, hasScore, countLiveMatches }) {
   if (!hasScore) return false;
   if (isFinishedStatus(status)) return true;
-  if (countLiveMatches && isLiveStatus(status)) return true;
+
+  // The pool is intended to show live/provisional points. If the API has a numeric
+  // score for a live match, score it immediately.
+  if (isLiveStatus(status)) return true;
+
+  // Keep the old environment switch as an extra safety net for providers that
+  // use non-standard live statuses but still expose a current score.
+  if (countLiveMatches && !isClearlyNotScorableStatus(status)) return true;
 
   // Some data providers briefly return a final full-time score before the status is normalized
   // to FINISHED. Treat a full-time/regular-time score as final unless the status clearly means
