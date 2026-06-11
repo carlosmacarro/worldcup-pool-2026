@@ -204,9 +204,9 @@ schedule: '@hourly'      // hourly
 
 ## Important note about match numbers
 
-The Excel file uses official match numbers in column `AH`. football-data.org does not expose FIFA match numbers directly, so this app maps API matches to Excel match numbers by chronological order.
+The Excel file uses official match numbers in column `AH`. football-data.org does not expose FIFA match numbers directly, so this app maps group-stage API matches to the Excel match rows by normalized home/away team names. This avoids result rows being shifted when the API order is different from the Excel order.
 
-That should normally work if the Excel template follows the official schedule. If you notice one match being scored against the wrong prediction, add an environment variable called `MATCH_API_ID_OVERRIDES`.
+If you notice one match still not mapping because the API uses a different team spelling, either add the spelling to `netlify/functions/_lib/normalise.mjs` or add an environment variable called `MATCH_API_ID_OVERRIDES`.
 
 Example:
 
@@ -277,3 +277,14 @@ After deploying this fix, run a manual sync from `/admin.html` so the `matches` 
 ## 2026-06-11 API defensive mapping hotfix
 
 If the admin sync fails with `Cannot read properties of undefined (reading 'homeTeam')`, update `netlify/functions/_lib/footballData.mjs` from this package and redeploy. The importer now filters unexpected/empty API rows and reads team IDs/names defensively before mapping API results to Excel fixtures.
+
+---
+
+## 2026-06 live/recent matches hotfix
+
+This version fixes two issues reported after the first real match:
+
+- The homepage match panel now shows live matches, recently finished matches, and then the next scheduled matches. A just-finished match no longer disappears simply because future matches exist.
+- The result mapper now treats full-time/regular-time scores as scorable when the status is final-like, and it includes a `Türkiye` → `Turkey` alias so Australia–Türkiye/Turquía maps correctly.
+
+After deploying, run a manual sync from `/admin.html` so the corrected match mapping and points are written to Supabase.

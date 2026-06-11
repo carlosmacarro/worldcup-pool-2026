@@ -9,21 +9,56 @@ function scoreValue(scoreObj, key) {
 
 function pickScore(match) {
   const candidates = [
-    match?.score?.fullTime,
-    match?.score?.regularTime,
-    match?.score?.current,
-    match?.score?.halfTime
+    { value: match?.score?.fullTime, source: 'fullTime' },
+    { value: match?.score?.regularTime, source: 'regularTime' },
+    { value: match?.score?.current, source: 'liveOrPartial' },
+    { value: match?.score?.halfTime, source: 'halfTime' }
   ];
 
   for (const candidate of candidates) {
-    const home = scoreValue(candidate, 'home');
-    const away = scoreValue(candidate, 'away');
+    const home = scoreValue(candidate.value, 'home');
+    const away = scoreValue(candidate.value, 'away');
     if (Number.isFinite(home) && Number.isFinite(away)) {
-      return { home, away, source: candidate === match?.score?.fullTime ? 'fullTime' : 'liveOrPartial' };
+      return { home, away, source: candidate.source };
     }
   }
 
   return { home: null, away: null, source: null };
+}
+
+const LIVE_STATUSES = new Set(['IN_PLAY', 'LIVE', 'PAUSED']);
+const FINISHED_STATUSES = new Set(['FINISHED', 'AWARDED', 'AFTER_EXTRA_TIME', 'PENALTY_SHOOTOUT']);
+const NOT_SCORABLE_STATUSES = new Set(['SCHEDULED', 'TIMED', 'POSTPONED', 'CANCELLED', 'CANCELED', 'SUSPENDED']);
+
+function normalizedStatus(match) {
+  return String(match?.status || 'UNKNOWN').toUpperCase();
+}
+
+function isLiveStatus(status) {
+  return LIVE_STATUSES.has(status);
+}
+
+function isFinishedStatus(status) {
+  return FINISHED_STATUSES.has(status);
+}
+
+function isClearlyNotScorableStatus(status) {
+  return NOT_SCORABLE_STATUSES.has(status);
+}
+
+function isMatchScorable({ status, scoreSource, hasScore, countLiveMatches }) {
+  if (!hasScore) return false;
+  if (isFinishedStatus(status)) return true;
+  if (countLiveMatches && isLiveStatus(status)) return true;
+
+  // Some data providers briefly return a final full-time score before the status is normalized
+  // to FINISHED. Treat a full-time/regular-time score as final unless the status clearly means
+  // the match has not been played or was postponed/cancelled.
+  if ((scoreSource === 'fullTime' || scoreSource === 'regularTime') && !isClearlyNotScorableStatus(status)) {
+    return true;
+  }
+
+  return false;
 }
 
 export async function fetchFootballDataMatches() {
@@ -110,9 +145,7 @@ function inferFlip(match, fixture) {
 
 function convertMatch(match, matchNo, countLiveMatches, { fixture = null, flip = false } = {}) {
   const score = pickScore(match);
-  const status = match.status || 'UNKNOWN';
-  const isFinished = status === 'FINISHED';
-  const isLive = ['IN_PLAY', 'LIVE', 'PAUSED'].includes(status);
+  const status = normalizedStatus(match);
   const hasScore = Number.isFinite(score.home) && Number.isFinite(score.away);
   const shouldFlip = flip || inferFlip(match, fixture);
 
@@ -130,7 +163,12 @@ function convertMatch(match, matchNo, countLiveMatches, { fixture = null, flip =
     real_home: hasScore ? (shouldFlip ? score.away : score.home) : null,
     real_away: hasScore ? (shouldFlip ? score.home : score.away) : null,
     score_source: score.source,
-    is_scorable: hasScore && (isFinished || (countLiveMatches && isLive)),
+    is_scorable: isMatchScorable({
+      status,
+      scoreSource: score.source,
+      hasScore,
+      countLiveMatches
+    }),
     updated_at: new Date().toISOString()
   };
 }

@@ -109,26 +109,50 @@ function isUpcomingMatch(match, now = Date.now()) {
   return kickoff === Number.POSITIVE_INFINITY || kickoff >= now - 15 * 60 * 1000;
 }
 
+function isRecentlyPlayedMatch(match, now = Date.now()) {
+  const status = String(match.status || '').toUpperCase();
+  const kickoff = matchTime(match);
+  const twelveHours = 12 * 60 * 60 * 1000;
+  const sixHours = 6 * 60 * 60 * 1000;
+
+  if (match.isScorable || status === 'FINISHED' || status === 'AWARDED') {
+    return kickoff !== Number.POSITIVE_INFINITY ? kickoff >= now - twelveHours : true;
+  }
+
+  // If a match has started/finished but the API has not mapped yet, keep it visible
+  // instead of making it disappear from the homepage as soon as kickoff passes.
+  return kickoff !== Number.POSITIVE_INFINITY && kickoff < now && kickoff >= now - sixHours;
+}
+
+function uniqueMatches(matches) {
+  const seen = new Set();
+  const result = [];
+  for (const match of matches) {
+    const key = String(match.matchNo ?? `${match.homeTeam}-${match.awayTeam}-${match.kickoff}`);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(match);
+  }
+  return result;
+}
+
 function selectMatchesToShow(matches) {
   const now = Date.now();
   const live = matches.filter(isLiveMatch).sort(byKickoffThenMatchNo);
+  const recent = matches
+    .filter((match) => !isLiveMatch(match) && isRecentlyPlayedMatch(match, now))
+    .sort((a, b) => byKickoffThenMatchNo(b, a));
   const upcoming = matches
-    .filter((match) => !isLiveMatch(match) && isUpcomingMatch(match, now))
+    .filter((match) => !isLiveMatch(match) && !isRecentlyPlayedMatch(match, now) && isUpcomingMatch(match, now))
     .sort(byKickoffThenMatchNo);
 
-  if (live.length) {
-    return {
-      title: 'En vivo / siguientes partidos',
-      subtitle: '',
-      matches: [...live, ...upcoming].slice(0, MAX_MATCH_CARDS)
-    };
-  }
+  const selected = uniqueMatches([...live, ...recent, ...upcoming]).slice(0, MAX_MATCH_CARDS);
 
-  if (upcoming.length) {
+  if (selected.length) {
     return {
-      title: 'Siguientes partidos',
-      subtitle: 'Actualmente no hay partidos en directo',
-      matches: upcoming.slice(0, MAX_MATCH_CARDS)
+      title: 'Live / recent / next group matches',
+      subtitle: 'Live matches first, then recently finished matches, then the next scheduled matches',
+      matches: selected
     };
   }
 
@@ -137,8 +161,8 @@ function selectMatchesToShow(matches) {
     .sort((a, b) => byKickoffThenMatchNo(b, a));
 
   return {
-    title: 'Resultados recientes',
-    subtitle: 'Fase de grupos finalizada',
+    title: 'Recent group results',
+    subtitle: 'No live or upcoming group matches found, so showing the latest scored results',
     matches: recentFinished.slice(0, MAX_MATCH_CARDS)
   };
 }
