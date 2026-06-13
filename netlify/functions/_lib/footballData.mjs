@@ -444,18 +444,13 @@ export function mapFootballDataMatches(apiMatches, { countLiveMatches = false, e
 
   addUnmatchedDiagnostics({ warnings, fixtures: [...rowsByMatchNo.values()].filter((r) => !r.api_id), sorted, usedApiIds });
 
-  // Keep remaining API matches, mostly knockout matches. Start after the reserved
-  // Excel group fixtures. This avoids dropping a leftover API row into a group
-  // match number and corrupting group scoring.
-  let nextMatchNo = Math.max(0, ...fixtures.map((fixture) => fixture.match_no)) + 1;
-  for (const match of sorted) {
-    const matchId = apiMatchId(match);
-    if (!matchId || usedApiIds.has(matchId)) continue;
-
-    while (rowsByMatchNo.has(nextMatchNo)) nextMatchNo += 1;
-    rowsByMatchNo.set(nextMatchNo, convertMatch(match, nextMatchNo, countLiveMatches));
-    nextMatchNo += 1;
-  }
+  // IMPORTANT: do not append unmatched API matches to invented Excel match numbers.
+  // The workbook already has its own knockout rows (73+), but those rows contain
+  // users' future knockout predictions/placeholders, not reliable fixture IDs.
+  // If we put an unmatched group/API result into match_no 73+, the participant
+  // knockout pages and sometimes the leaderboard can show a real result beside
+  // the wrong bet. Unmatched API rows are reported in warnings instead and the
+  // matching can be fixed with aliases or MATCH_API_ID_OVERRIDES.
 
   return [...rowsByMatchNo.values()].sort((a, b) => a.match_no - b.match_no);
 }

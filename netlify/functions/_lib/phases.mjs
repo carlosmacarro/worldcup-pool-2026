@@ -20,9 +20,17 @@ export function phaseForMatchLike(row = {}) {
   const roundLabel = String(row.round_label ?? row.roundLabel ?? '').trim().toUpperCase();
   const stage = String(row.stage ?? '').trim().toUpperCase();
 
-  if (stage.includes('GROUP')) return 'group';
+  // The Excel template's match number is the most trustworthy phase marker.
+  // Rows 1-72 are group stage; rows 73+ are knockout/future-stage bets.
+  // This must win over API stage text so a wrongly mapped GROUP_STAGE result
+  // cannot make a knockout bet appear as a group-stage bet.
+  if (Number.isInteger(matchNo)) {
+    if (matchNo >= 1 && matchNo <= GROUP_STAGE_MAX_MATCH_NO) return 'group';
+    if (matchNo > GROUP_STAGE_MAX_MATCH_NO) return 'knockout';
+  }
+
   if (/^J[123]$/.test(roundLabel)) return 'group';
-  if (Number.isInteger(matchNo) && matchNo >= 1 && matchNo <= GROUP_STAGE_MAX_MATCH_NO) return 'group';
+  if (stage.includes('GROUP')) return 'group';
 
   return 'knockout';
 }

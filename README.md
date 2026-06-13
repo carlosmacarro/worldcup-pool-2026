@@ -377,3 +377,21 @@ MATCH_DATE_TOLERANCE_HOURS=48
 ```
 
 You normally do not need to set it. Increase it only if the diagnostic says a correct API candidate was rejected only because the kickoff date difference is larger than expected.
+
+
+### Latest fix: Bosnia/Herzegovina team alias
+
+The diagnostic output showed that football-data.org returned `Canada vs Bosnia-Herzegovina 1-1`, while the Excel template uses `Canadá vs Bosnia y Herzegovina`. The API was read correctly; the match stayed pending because the team-name alias list did not include this Spanish/API variant. `normalise.mjs` now maps these variants to the same canonical team name.
+
+
+### Fix: results appearing in knockout rows
+
+The sync only writes match results for the Excel group-stage rows (`match_no` 1-72).
+Unmatched API matches are no longer appended to invented match numbers such as 73+,
+because those numbers belong to knockout/future bets in the Excel template. On each
+sync, stale `matches` rows above 72 are deleted from Supabase so old bad mappings
+do not keep appearing in participant knockout pages.
+
+If a finished group match stays pending, use **Admin → Check API mapping**. The
+diagnostic will show whether the API result was returned but rejected because of
+a team alias/date mismatch. In that case, fix the alias or use `MATCH_API_ID_OVERRIDES`.

@@ -174,6 +174,18 @@ export default async function handler(req) {
       };
     });
 
+    const staleKnockoutMatchRows = storedMatches
+      .filter((match) => Number(match.match_no) > 72 && match.api_id)
+      .map((match) => ({
+        matchNo: match.match_no,
+        apiId: match.api_id,
+        status: match.status,
+        homeTeam: match.home_team,
+        awayTeam: match.away_team,
+        score: { home: match.real_home, away: match.real_away },
+        stage: match.stage
+      }));
+
     return jsonResponse({
       ok: true,
       generatedAt: new Date().toISOString(),
@@ -189,9 +201,11 @@ export default async function handler(req) {
         excelGroupFixtures: fixtures.length,
         apiMatches: apiMatches.length,
         storedMatches: storedMatches.length,
-        mappedMatches: mappedMatches.length
+        mappedMatches: mappedMatches.length,
+        staleKnockoutMatchRows: staleKnockoutMatchRows.length
       },
       warnings,
+      staleKnockoutMatchRows,
       problemRows: rows.filter((row) => row.problems.length),
       rows
     });

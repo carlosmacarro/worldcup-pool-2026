@@ -92,7 +92,7 @@ function applyPredictionToParticipant(participant, prediction, match) {
 
   const bet = {
     matchNo: prediction.match_no,
-    phase: phaseForMatchLike({ ...prediction, stage: match?.stage }),
+    phase: phaseForMatchLike(prediction),
     roundLabel: prediction.round_label || null,
     kickoff: prediction.kickoff || match?.kickoff,
     status: match?.status || 'PENDING',
@@ -166,7 +166,7 @@ export async function buildLeaderboard({ phase = 'group' } = {}) {
 
   for (const prediction of predictions) {
     const match = matchMap.get(prediction.match_no);
-    if (!isPhaseMatch({ ...prediction, stage: match?.stage }, selectedPhase)) continue;
+    if (!isPhaseMatch(prediction, selectedPhase)) continue;
 
     const participant = participantMap.get(prediction.participant_key);
     if (!participant) continue;
@@ -191,7 +191,7 @@ export async function buildLeaderboard({ phase = 'group' } = {}) {
     lastSync: latestSyncSummary(logs),
     summary: {
       participants: participants.length,
-      predictions: predictions.filter((p) => isPhaseMatch({ ...p, stage: matchMap.get(p.match_no)?.stage }, selectedPhase)).length,
+      predictions: predictions.filter((p) => isPhaseMatch(p, selectedPhase)).length,
       matches: filteredMatches.length,
       scorableMatches: filteredMatches.filter(effectiveIsScorable).length,
       finishedMatches: filteredMatches.filter((m) => String(m.status || '').toUpperCase() === 'FINISHED').length
@@ -224,7 +224,7 @@ export async function buildParticipantBets(participantKey, { phase = 'group' } =
   const matchMap = new Map(matches.map((m) => [m.match_no, m]));
   const participantPredictions = predictions
     .filter((p) => p.participant_key === participantKey)
-    .filter((p) => isPhaseMatch({ ...p, stage: matchMap.get(p.match_no)?.stage }, selectedPhase));
+    .filter((p) => isPhaseMatch(p, selectedPhase));
 
   for (const prediction of participantPredictions) {
     applyPredictionToParticipant(summary, prediction, matchMap.get(prediction.match_no));

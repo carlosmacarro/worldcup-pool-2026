@@ -3,7 +3,7 @@ import { listExcelFilesInDriveFolder, downloadDriveFileBuffer } from './googleDr
 import { parsePredictionsFromExcelBuffer } from './xlsxParser.mjs';
 import { fetchFootballDataMatches, mapFootballDataMatches } from './footballData.mjs';
 import { getConfig } from './config.mjs';
-import { isPhaseMatch } from './phases.mjs';
+import { GROUP_STAGE_MAX_MATCH_NO, isPhaseMatch } from './phases.mjs';
 
 const CHUNK_SIZE = 500;
 
@@ -145,6 +145,16 @@ async function syncMatchesFromFootballData(supabase, excelFixtures = []) {
     excelFixtures
   });
   await upsertChunked(supabase, 'matches', mappedMatches, 'match_no');
+
+  // The public leaderboard is currently group-stage only. Older versions could
+  // create rows 73+ by appending unmatched API matches, which made real results
+  // appear beside knockout bets. Remove those stale rows on every sync.
+  const { error: cleanupError } = await supabase
+    .from('matches')
+    .delete()
+    .gt('match_no', GROUP_STAGE_MAX_MATCH_NO);
+  if (cleanupError) throw cleanupError;
+
   return { matchesCount: mappedMatches.length };
 }
 
