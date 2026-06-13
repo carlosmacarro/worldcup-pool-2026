@@ -309,3 +309,71 @@ This version fixes the case where the live/recent match card shows a score but t
 The leaderboard now scores a match whenever Supabase has a numeric real score and the match is final-like or live-like, even if an older sync stored `is_scorable=false`. The sync also treats live scores as provisional scoring by default, so the leaderboard updates during matches.
 
 After deploying these files, run a manual sync from `/admin.html`. If you already see scores in the match cards, the leaderboard should update immediately after redeploying, but running sync refreshes the `matches` table too.
+
+## Match mapping safety update
+
+The sync now maps API results to Excel group fixtures using **team names plus fixture date**. If a team pair matches but the API date is too far from the Excel date, the result is rejected and the Excel row remains pending instead of receiving the wrong score.
+
+Default date tolerance: `48` hours.
+
+Optional environment variable:
+
+```text
+MATCH_DATE_TOLERANCE_HOURS=48
+```
+
+For any stubborn mismatch, you can force an exact API-to-Excel mapping with:
+
+```text
+MATCH_API_ID_OVERRIDES={"1":"API_MATCH_ID_FOR_EXCEL_MATCH_1"}
+```
+
+Run a manual sync after deploying this update. The sync will also reset previously corrupted group rows back to pending if they no longer match safely.
+
+---
+
+## Debugging API/result mapping
+
+If match cards show wrong statuses or finished matches remain pending, open:
+
+```text
+/admin.html
+```
+
+Paste `ADMIN_SECRET` and click **Check API mapping**.
+
+This compares:
+
+- group-stage fixtures parsed from the Excel predictions already stored in Supabase
+- the current football-data.org API response
+- the rows currently stored in the `matches` table
+- the rows that the mapper would write if you ran a sync now
+
+The diagnostic output highlights:
+
+- Excel fixtures past kickoff that still have no API match
+- future Excel fixtures mapped to a finished API result
+- API rows that look finished/live but do not map to any Excel group fixture
+- date differences between Excel kickoff and API kickoff
+
+### Excel timezone
+
+The importer now treats Excel fixture dates as local template times. By default it uses:
+
+```text
+EXCEL_TIME_ZONE=Europe/Madrid
+```
+
+You normally do not need to set it because Europe/Madrid is the default. If you want to override it in Netlify, add `EXCEL_TIME_ZONE` as an environment variable.
+
+The importer also scans the `Home` sheet for an IANA timezone string such as `Europe/Madrid`. If it finds one, that workbook timezone is used for its fixture dates.
+
+### Date guard
+
+The mapper only attaches an API result to an Excel group-stage fixture if teams and dates are compatible. Default tolerance:
+
+```text
+MATCH_DATE_TOLERANCE_HOURS=48
+```
+
+You normally do not need to set it. Increase it only if the diagnostic says a correct API candidate was rejected only because the kickoff date difference is larger than expected.

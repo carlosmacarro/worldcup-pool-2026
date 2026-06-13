@@ -22,6 +22,7 @@
         <input id="secret" type="password" autocomplete="current-password" placeholder="Paste your admin secret" />
         <button id="syncBtn" class="primary-button" type="button">Run sync</button>
         <button id="statusBtn" class="ghost-button" type="button">Check last sync</button>
+        <button id="debugBtn" class="ghost-button" type="button">Check API mapping</button>
         <pre id="output" class="output">Ready.</pre>
       </section>
     </main>
@@ -29,6 +30,7 @@
     <script type="module">
       const btn = document.querySelector('#syncBtn');
       const statusBtn = document.querySelector('#statusBtn');
+      const debugBtn = document.querySelector('#debugBtn');
       const secret = document.querySelector('#secret');
       const output = document.querySelector('#output');
       let pollTimer = null;
@@ -62,6 +64,53 @@
             ].filter(Boolean).join('\n\n')
           };
         }
+      }
+
+
+
+      function formatDebug(data) {
+        const lines = [];
+        lines.push('API / Excel mapping diagnostic');
+        lines.push('');
+        lines.push(`Generated: ${data.generatedAt}`);
+        lines.push(`API matches read: ${data.counts?.apiMatches ?? '?'}`);
+        lines.push(`Excel group fixtures: ${data.counts?.excelGroupFixtures ?? '?'}`);
+        lines.push(`Stored matches: ${data.counts?.storedMatches ?? '?'}`);
+        lines.push(`Timezone used for Excel dates: ${data.config?.excelTimeZone || 'unknown'}`);
+        lines.push(`Date tolerance: ${data.config?.matchDateToleranceHours || 'unknown'} hours`);
+        lines.push('');
+
+        if (Array.isArray(data.problemRows) && data.problemRows.length) {
+          lines.push('Problem rows:');
+          for (const row of data.problemRows.slice(0, 20)) {
+            lines.push(`- Match ${row.matchNo}: ${row.excel.homeTeam} vs ${row.excel.awayTeam} (${row.excel.kickoff || 'no kickoff'})`);
+            for (const problem of row.problems) lines.push(`  • ${problem}`);
+            if (row.wouldMapNow?.api) {
+              const score = row.wouldMapNow.score?.home == null ? 'no score' : `${row.wouldMapNow.score.home}-${row.wouldMapNow.score.away}`;
+              lines.push(`  Would map to API ${row.wouldMapNow.apiId}: ${row.wouldMapNow.api.homeTeam} vs ${row.wouldMapNow.api.awayTeam}, ${row.wouldMapNow.status}, ${score}, diff ${row.wouldMapNow.dateDiffHours ?? '?'}h`);
+            }
+            if (Array.isArray(row.relatedApiCandidates) && row.relatedApiCandidates.length) {
+              lines.push('  Related API candidates:');
+              for (const c of row.relatedApiCandidates.slice(0, 3)) {
+                lines.push(`    - API ${c.api.apiId}: ${c.api.homeTeam} vs ${c.api.awayTeam}, ${c.api.utcDate}, ${c.api.status}, ${c.scoreText || 'no score'}, diff ${c.dateDiffHours ?? '?'}h`);
+              }
+            }
+          }
+          if (data.problemRows.length > 20) lines.push(`- ...and ${data.problemRows.length - 20} more problem rows`);
+        } else {
+          lines.push('No obvious mapping problems found.');
+        }
+
+        if (Array.isArray(data.warnings) && data.warnings.length) {
+          lines.push('');
+          lines.push('Warnings:');
+          for (const warning of data.warnings.slice(0, 20)) {
+            lines.push(`- ${warning.message || JSON.stringify(warning)}`);
+          }
+          if (data.warnings.length > 20) lines.push(`- ...and ${data.warnings.length - 20} more warnings`);
+        }
+
+        return lines.join('\n');
       }
 
       function formatLog(log) {
@@ -140,6 +189,24 @@
         } catch (error) {
           output.textContent = error.message || String(error);
           btn.disabled = false;
+        }
+      });
+
+
+
+      debugBtn.addEventListener('click', async () => {
+        debugBtn.disabled = true;
+        output.textContent = 'Checking API / Excel mapping…';
+        try {
+          const data = await fetchJsonOrShow('/.netlify/functions/debug-mapping', {
+            headers: { 'x-admin-secret': getSecret() }
+          });
+          if (!data.ok) throw new Error(data.error || 'Could not run mapping diagnostic.');
+          output.textContent = formatDebug(data);
+        } catch (error) {
+          output.textContent = error.message || String(error);
+        } finally {
+          debugBtn.disabled = false;
         }
       });
 

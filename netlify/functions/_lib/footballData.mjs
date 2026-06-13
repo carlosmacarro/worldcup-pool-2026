@@ -1,13 +1,15 @@
 import { getConfig } from './config.mjs';
 import { normaliseTeam } from './normalise.mjs';
 
+const DEFAULT_MATCH_DATE_TOLERANCE_HOURS = 48;
+
 function scoreValue(scoreObj, key) {
   if (!scoreObj) return null;
   const value = scoreObj[key] ?? scoreObj[`${key}Team`];
   return Number.isFinite(Number(value)) ? Number(value) : null;
 }
 
-function pickScore(match) {
+export function pickScore(match) {
   const candidates = [
     { value: match?.score?.fullTime, source: 'fullTime' },
     { value: match?.score?.regularTime, source: 'regularTime' },
@@ -30,7 +32,7 @@ const LIVE_STATUSES = new Set(['IN_PLAY', 'LIVE', 'PAUSED']);
 const FINISHED_STATUSES = new Set(['FINISHED', 'AWARDED', 'AFTER_EXTRA_TIME', 'PENALTY_SHOOTOUT']);
 const NOT_SCORABLE_STATUSES = new Set(['SCHEDULED', 'TIMED', 'POSTPONED', 'CANCELLED', 'CANCELED', 'SUSPENDED']);
 
-function normalizedStatus(match) {
+export function normalizedStatus(match) {
   return String(match?.status || 'UNKNOWN').toUpperCase();
 }
 
@@ -50,7 +52,7 @@ function isMatchScorable({ status, scoreSource, hasScore, countLiveMatches }) {
   if (!hasScore) return false;
   if (isFinishedStatus(status)) return true;
 
-  // The pool is intended to show live/provisional points. If the API has a numeric
+  // The pool can show live/provisional points. If the API has a numeric
   // score for a live match, score it immediately.
   if (isLiveStatus(status)) return true;
 
@@ -58,8 +60,8 @@ function isMatchScorable({ status, scoreSource, hasScore, countLiveMatches }) {
   // use non-standard live statuses but still expose a current score.
   if (countLiveMatches && !isClearlyNotScorableStatus(status)) return true;
 
-  // Some data providers briefly return a final full-time score before the status is normalized
-  // to FINISHED. Treat a full-time/regular-time score as final unless the status clearly means
+  // Some data providers briefly return a final full-time score before the status
+  // is normalized to FINISHED. Treat it as final unless the status clearly means
   // the match has not been played or was postponed/cancelled.
   if ((scoreSource === 'fullTime' || scoreSource === 'regularTime') && !isClearlyNotScorableStatus(status)) {
     return true;
@@ -90,8 +92,8 @@ export async function fetchFootballDataMatches() {
     throw new Error(`football-data.org request failed: ${message}`);
   }
 
-  // The normal football-data.org shape is { matches: [...] }, but keep this defensive so
-  // an unexpected placeholder/error shape cannot crash the importer later.
+  // The normal football-data.org shape is { matches: [...] }, but keep this
+  // defensive so an unexpected placeholder/error shape cannot crash the importer.
   return Array.isArray(payload?.matches) ? payload.matches.filter(Boolean) : [];
 }
 
@@ -105,7 +107,13 @@ function parseOverrides() {
   }
 }
 
-function apiMatchId(match) {
+function matchDateToleranceMs() {
+  const hours = Number(process.env.MATCH_DATE_TOLERANCE_HOURS || DEFAULT_MATCH_DATE_TOLERANCE_HOURS);
+  const safeHours = Number.isFinite(hours) && hours > 0 ? hours : DEFAULT_MATCH_DATE_TOLERANCE_HOURS;
+  return safeHours * 60 * 60 * 1000;
+}
+
+export function apiMatchId(match) {
   return match?.id == null ? null : String(match.id);
 }
 
@@ -115,29 +123,75 @@ function apiTeamName(team) {
   return team.name || team.shortName || team.tla || null;
 }
 
-function apiHomeTeam(match) {
-  // football-data.org can return placeholder rows or unexpected objects while fixtures are still being finalized.
-  // Keep the sync running if a row is missing homeTeam.
+export function apiHomeTeam(match) {
   return apiTeamName(match?.homeTeam);
 }
 
-function apiAwayTeam(match) {
-  // football-data.org can return placeholder rows or unexpected objects while fixtures are still being finalized.
-  // Keep the sync running if a row is missing awayTeam.
+export function apiAwayTeam(match) {
   return apiTeamName(match?.awayTeam);
 }
 
-function pairKey(homeTeam, awayTeam) {
+function apiStage(match) {
+  return String(match?.stage || '').toUpperCase();
+}
+
+export function apiUtcTime(match) {
+  const t = new Date(match?.utcDate || '').getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+export function fixtureUtcTime(fixture) {
+  const t = new Date(fixture?.kickoff || '').getTime();
+  return Number.isFinite(t) ? t : null;
+}
+
+export function dateDiffMs(match, fixture) {
+  const apiTime = apiUtcTime(match);
+  const fixtureTime = fixtureUtcTime(fixture);
+  if (apiTime == null || fixtureTime == null) return null;
+  return Math.abs(apiTime - fixtureTime);
+}
+
+function datesAreCompatible(match, fixture) {
+  const diff = dateDiffMs(match, fixture);
+  if (diff == null) return true;
+  return diff <= matchDateToleranceMs();
+}
+
+function stageIsCompatible(match, fixture) {
+  const fixtureStage = String(fixture?.stage || '').toUpperCase();
+  const stage = apiStage(match);
+
+  // If football-data.org says this is not a group-stage match, never attach it
+  // to an Excel group-stage row. This prevents future knockout rows/results
+  // from contaminating group fixtures.
+  if (fixtureStage.includes('GROUP') && stage && !stage.includes('GROUP')) return false;
+
+  return true;
+}
+
+export function pairKey(homeTeam, awayTeam) {
   const home = normaliseTeam(homeTeam);
   const away = normaliseTeam(awayTeam);
   if (!home || !away) return null;
   return `${home}__${away}`;
 }
 
-function unorderedPairKey(homeTeam, awayTeam) {
+export function unorderedPairKey(homeTeam, awayTeam) {
   const teams = [normaliseTeam(homeTeam), normaliseTeam(awayTeam)].filter(Boolean).sort();
   if (teams.length !== 2) return null;
   return teams.join('__');
+}
+
+function fixtureLabel(fixture) {
+  return `#${fixture?.match_no ?? '?'} ${fixture?.home_team || '?'} vs ${fixture?.away_team || '?'}`;
+}
+
+function apiMatchLabel(match) {
+  const status = normalizedStatus(match);
+  const score = pickScore(match);
+  const scoreText = Number.isFinite(score.home) && Number.isFinite(score.away) ? ` ${score.home}-${score.away}` : '';
+  return `${apiHomeTeam(match) || '?'} vs ${apiAwayTeam(match) || '?'}${scoreText} (${status}, ${match?.utcDate || 'no date'}, api_id=${apiMatchId(match) || 'none'})`;
 }
 
 function inferFlip(match, fixture) {
@@ -145,8 +199,10 @@ function inferFlip(match, fixture) {
   const apiKey = pairKey(apiHomeTeam(match), apiAwayTeam(match));
   const fixtureKey = pairKey(fixture.home_team, fixture.away_team);
   const reversedFixtureKey = pairKey(fixture.away_team, fixture.home_team);
+
   if (apiKey && reversedFixtureKey && apiKey === reversedFixtureKey) return true;
   if (apiKey && fixtureKey && apiKey === fixtureKey) return false;
+
   return false;
 }
 
@@ -159,10 +215,11 @@ function convertMatch(match, matchNo, countLiveMatches, { fixture = null, flip =
   return {
     match_no: matchNo,
     api_id: apiMatchId(match),
-    kickoff: match.utcDate || fixture?.kickoff || null,
+    kickoff: match?.utcDate || fixture?.kickoff || null,
     status,
-    stage: match.stage || fixture?.stage || null,
-    group_name: match.group || fixture?.group_name || null,
+    stage: match?.stage || fixture?.stage || null,
+    group_name: match?.group || fixture?.group_name || null,
+
     // Store teams in the same home/away orientation as the Excel template.
     // This is important because predictions are also stored in Excel orientation.
     home_team: fixture?.home_team || (shouldFlip ? apiAwayTeam(match) : apiHomeTeam(match)),
@@ -170,12 +227,7 @@ function convertMatch(match, matchNo, countLiveMatches, { fixture = null, flip =
     real_home: hasScore ? (shouldFlip ? score.away : score.home) : null,
     real_away: hasScore ? (shouldFlip ? score.home : score.away) : null,
     score_source: score.source,
-    is_scorable: isMatchScorable({
-      status,
-      scoreSource: score.source,
-      hasScore,
-      countLiveMatches
-    }),
+    is_scorable: isMatchScorable({ status, scoreSource: score.source, hasScore, countLiveMatches }),
     updated_at: new Date().toISOString()
   };
 }
@@ -205,10 +257,12 @@ function buildApiIndexes(apiMatches) {
   for (const match of apiMatches) {
     const ordered = pairKey(apiHomeTeam(match), apiAwayTeam(match));
     const unordered = unorderedPairKey(apiHomeTeam(match), apiAwayTeam(match));
+
     if (ordered) {
       if (!byOrderedPair.has(ordered)) byOrderedPair.set(ordered, []);
       byOrderedPair.get(ordered).push(match);
     }
+
     if (unordered) {
       if (!byUnorderedPair.has(unordered)) byUnorderedPair.set(unordered, []);
       byUnorderedPair.get(unordered).push(match);
@@ -218,23 +272,114 @@ function buildApiIndexes(apiMatches) {
   return { byOrderedPair, byUnorderedPair };
 }
 
-function findUnusedCandidate(candidates = [], usedApiIds) {
-  return (candidates || []).find((match) => {
-    const id = apiMatchId(match);
-    return id && !usedApiIds.has(id);
-  });
+function candidatesForFixture(candidates = [], fixture, usedApiIds) {
+  return (candidates || [])
+    .filter((match) => {
+      const id = apiMatchId(match);
+      if (!id || usedApiIds.has(id)) return false;
+      if (!stageIsCompatible(match, fixture)) return false;
+      if (!datesAreCompatible(match, fixture)) return false;
+      return true;
+    })
+    .sort((a, b) => {
+      const da = dateDiffMs(a, fixture) ?? Number.MAX_SAFE_INTEGER;
+      const db = dateDiffMs(b, fixture) ?? Number.MAX_SAFE_INTEGER;
+      if (da !== db) return da - db;
+      return Number(apiMatchId(a) || 0) - Number(apiMatchId(b) || 0);
+    });
+}
+
+function findBestCandidate(candidates = [], fixture, usedApiIds) {
+  const compatible = candidatesForFixture(candidates, fixture, usedApiIds);
+  if (!compatible.length) return null;
+
+  // If the fixture has no date and the same pair appears more than once in the API,
+  // do not guess. A wrong guess is worse than leaving the row pending and showing a warning.
+  if (fixtureUtcTime(fixture) == null && compatible.length > 1) return null;
+
+  return compatible[0];
 }
 
 function sortMatchesChronologically(apiMatches) {
-  return [...(Array.isArray(apiMatches) ? apiMatches : [])].filter(Boolean).sort((a, b) => {
-    const da = new Date(a?.utcDate || 0).getTime();
-    const db = new Date(b?.utcDate || 0).getTime();
-    if (da !== db) return da - db;
-    return Number(apiMatchId(a) || 0) - Number(apiMatchId(b) || 0);
-  });
+  return [...(Array.isArray(apiMatches) ? apiMatches : [])]
+    .filter(Boolean)
+    .sort((a, b) => {
+      const da = new Date(a?.utcDate || 0).getTime();
+      const db = new Date(b?.utcDate || 0).getTime();
+      if (da !== db) return da - db;
+      return Number(apiMatchId(a) || 0) - Number(apiMatchId(b) || 0);
+    });
 }
 
-export function mapFootballDataMatches(apiMatches, { countLiveMatches = false, excelFixtures = [] } = {}) {
+function isGroupApiMatch(match) {
+  const stage = apiStage(match);
+  return !stage || stage.includes('GROUP');
+}
+
+function isImportantUnmatchedApiMatch(match) {
+  const status = normalizedStatus(match);
+  const score = pickScore(match);
+  const hasScore = Number.isFinite(score.home) && Number.isFinite(score.away);
+  return isGroupApiMatch(match) && (isFinishedStatus(status) || isLiveStatus(status) || hasScore);
+}
+
+function addUnmatchedDiagnostics({ warnings, fixtures, sorted, usedApiIds }) {
+  if (!Array.isArray(warnings)) return;
+
+  const unmatchedScoredApiMatches = sorted
+    .filter((match) => {
+      const id = apiMatchId(match);
+      return id && !usedApiIds.has(id) && isImportantUnmatchedApiMatch(match);
+    })
+    .slice(0, 12);
+
+  for (const match of unmatchedScoredApiMatches) {
+    warnings.push({
+      message: `API match not matched to any Excel group fixture: ${apiMatchLabel(match)}. Check team aliases/date or add MATCH_API_ID_OVERRIDES.`
+    });
+  }
+
+  const now = Date.now();
+  const possiblyMissedExcelFixtures = fixtures
+    .filter((fixture) => {
+      const kickoff = fixtureUtcTime(fixture);
+      if (kickoff == null) return false;
+      // If the Excel fixture started more than 3 hours ago and it still has no API ID,
+      // surface it as a warning. This helps catch team-name alias issues quickly.
+      return kickoff < now - 3 * 60 * 60 * 1000;
+    })
+    .slice(0, 12);
+
+  for (const fixture of possiblyMissedExcelFixtures) {
+    warnings.push({
+      matchNo: fixture.match_no,
+      message: `Excel fixture is past kickoff but has no matched API result yet: ${fixtureLabel(fixture)} (${fixture.kickoff || 'no date'}).`
+    });
+  }
+}
+
+
+export function summarizeApiMatch(match) {
+  const score = pickScore(match);
+  return {
+    apiId: apiMatchId(match),
+    utcDate: match?.utcDate || null,
+    status: normalizedStatus(match),
+    stage: match?.stage || null,
+    group: match?.group || null,
+    homeTeam: apiHomeTeam(match),
+    awayTeam: apiAwayTeam(match),
+    normalizedHomeTeam: normaliseTeam(apiHomeTeam(match)),
+    normalizedAwayTeam: normaliseTeam(apiAwayTeam(match)),
+    score: {
+      home: Number.isFinite(score.home) ? score.home : null,
+      away: Number.isFinite(score.away) ? score.away : null,
+      source: score.source
+    }
+  };
+}
+
+export function mapFootballDataMatches(apiMatches, { countLiveMatches = false, excelFixtures = [], warnings = [] } = {}) {
   const sorted = sortMatchesChronologically(apiMatches);
   const fixtures = [...excelFixtures]
     .filter((fixture) => Number.isInteger(Number(fixture.match_no)) && fixture.home_team && fixture.away_team)
@@ -245,26 +390,31 @@ export function mapFootballDataMatches(apiMatches, { countLiveMatches = false, e
   const usedApiIds = new Set();
   const apiIndexes = buildApiIndexes(sorted);
 
-  // Reserve Excel group-stage fixtures before doing any fallback chronological mapping.
-  // If an API match cannot be matched, the row remains pending instead of being incorrectly scored.
+  // Reserve Excel group-stage fixtures before doing any fallback mapping.
+  // If an API match cannot be matched safely, the row remains pending instead
+  // of receiving another match's score.
   for (const fixture of fixtures) {
     rowsByMatchNo.set(fixture.match_no, convertFixtureOnly(fixture));
   }
 
-  // Optional exact overrides still win, but the resulting row is aligned to Excel teams.
+  // Optional exact overrides still win. Use this for any stubborn API/Excel fixture
+  // mismatch. Example Netlify env var:
+  // MATCH_API_ID_OVERRIDES={"1":"123456","2":"123457"}
   const overrides = parseOverrides();
   for (const [matchNoRaw, apiIdRaw] of Object.entries(overrides)) {
     const matchNo = Number(matchNoRaw);
     const apiId = String(apiIdRaw);
     const match = sorted.find((m) => apiMatchId(m) === apiId);
     if (!Number.isInteger(matchNo) || !match) continue;
+
     const fixture = fixtures.find((item) => item.match_no === matchNo) || null;
     rowsByMatchNo.set(matchNo, convertMatch(match, matchNo, countLiveMatches, { fixture }));
     usedApiIds.add(apiId);
   }
 
-  // Map group-stage API results by home/away team names, not by row/date order.
-  // The Excel template match numbers are not strictly chronological, so chronological mapping can shift results.
+  // Map group-stage API results by team names AND fixture date.
+  // The date guard prevents a finished result from being attached to a future
+  // Excel row that happens to involve the same/ambiguous teams.
   for (const fixture of fixtures) {
     if (rowsByMatchNo.get(fixture.match_no)?.api_id) continue;
 
@@ -272,33 +422,36 @@ export function mapFootballDataMatches(apiMatches, { countLiveMatches = false, e
     const reversed = pairKey(fixture.away_team, fixture.home_team);
     const unordered = unorderedPairKey(fixture.home_team, fixture.away_team);
 
-    let match = findUnusedCandidate(apiIndexes.byOrderedPair.get(ordered), usedApiIds);
+    let match = findBestCandidate(apiIndexes.byOrderedPair.get(ordered), fixture, usedApiIds);
     let flip = false;
 
     if (!match) {
-      match = findUnusedCandidate(apiIndexes.byOrderedPair.get(reversed), usedApiIds);
+      match = findBestCandidate(apiIndexes.byOrderedPair.get(reversed), fixture, usedApiIds);
       flip = Boolean(match);
     }
 
     if (!match) {
-      match = findUnusedCandidate(apiIndexes.byUnorderedPair.get(unordered), usedApiIds);
+      match = findBestCandidate(apiIndexes.byUnorderedPair.get(unordered), fixture, usedApiIds);
       flip = match ? inferFlip(match, fixture) : false;
     }
 
     if (!match) continue;
+
     rowsByMatchNo.set(fixture.match_no, convertMatch(match, fixture.match_no, countLiveMatches, { fixture, flip }));
-    {
-      const matchedId = apiMatchId(match);
-      if (matchedId) usedApiIds.add(matchedId);
-    }
+    const matchedId = apiMatchId(match);
+    if (matchedId) usedApiIds.add(matchedId);
   }
 
-  // Keep the remaining API matches, mostly knockout matches. Start after the reserved Excel fixtures.
-  // This avoids dropping a leftover API row into a group-stage match number and corrupting group scoring.
+  addUnmatchedDiagnostics({ warnings, fixtures: [...rowsByMatchNo.values()].filter((r) => !r.api_id), sorted, usedApiIds });
+
+  // Keep remaining API matches, mostly knockout matches. Start after the reserved
+  // Excel group fixtures. This avoids dropping a leftover API row into a group
+  // match number and corrupting group scoring.
   let nextMatchNo = Math.max(0, ...fixtures.map((fixture) => fixture.match_no)) + 1;
   for (const match of sorted) {
     const matchId = apiMatchId(match);
     if (!matchId || usedApiIds.has(matchId)) continue;
+
     while (rowsByMatchNo.has(nextMatchNo)) nextMatchNo += 1;
     rowsByMatchNo.set(nextMatchNo, convertMatch(match, nextMatchNo, countLiveMatches));
     nextMatchNo += 1;

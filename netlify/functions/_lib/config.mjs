@@ -15,7 +15,11 @@ export function getConfig() {
     footballCompetitionCode: process.env.FOOTBALL_COMPETITION_CODE || 'WC',
     footballSeason: process.env.FOOTBALL_SEASON || '2026',
     adminSecret: process.env.ADMIN_SECRET || '',
-    countLiveMatches: String(process.env.COUNT_LIVE_MATCHES || 'false').toLowerCase() === 'true'
+    countLiveMatches: String(process.env.COUNT_LIVE_MATCHES || 'false').toLowerCase() === 'true',
+    // Excel dates in your template are local fixture times. Use Madrid by default,
+    // but allow overriding from Netlify if a future workbook uses another timezone.
+    excelTimeZone: process.env.EXCEL_TIME_ZONE || 'Europe/Madrid',
+    matchDateToleranceHours: Number(process.env.MATCH_DATE_TOLERANCE_HOURS || '48')
   };
 }
 
