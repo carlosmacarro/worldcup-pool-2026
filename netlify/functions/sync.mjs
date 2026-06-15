@@ -1,11 +1,11 @@
-import { runSync } from './_lib/syncCore.mjs';
+import { runResultsOnlySync } from './_lib/resultsOnlySyncCore.mjs';
 
 export default async function handler() {
   try {
-    const result = await runSync({ source: 'scheduled' });
-    console.log('Scheduled sync complete', result);
+    const result = await runResultsOnlySync({ source: 'scheduled-results-only' });
+    console.log('Scheduled results-only sync complete', result);
   } catch (error) {
-    console.error('Scheduled sync failed', error);
+    console.error('Scheduled results-only sync failed', error);
   }
 }
 

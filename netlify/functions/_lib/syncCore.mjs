@@ -137,12 +137,13 @@ async function syncPredictionsFromDrive(supabase, warnings) {
   };
 }
 
-async function syncMatchesFromFootballData(supabase, excelFixtures = []) {
+async function syncMatchesFromFootballData(supabase, excelFixtures = [], warnings = []) {
   const cfg = getConfig();
   const apiMatches = await fetchFootballDataMatches();
   const mappedMatches = mapFootballDataMatches(apiMatches, {
     countLiveMatches: cfg.countLiveMatches,
-    excelFixtures
+    excelFixtures,
+    warnings
   });
   await upsertChunked(supabase, 'matches', mappedMatches, 'match_no');
 
@@ -166,7 +167,7 @@ export async function runSync({ source = 'manual' } = {}) {
   try {
     logId = await insertLog(supabase, source);
     const predictionStats = await syncPredictionsFromDrive(supabase, warnings);
-    const matchStats = await syncMatchesFromFootballData(supabase, predictionStats.excelFixtures || []);
+    const matchStats = await syncMatchesFromFootballData(supabase, predictionStats.excelFixtures || [], warnings);
     const { excelFixtures, ...publicPredictionStats } = predictionStats;
 
     const result = {

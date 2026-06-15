@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "netlify dev",
-    "check": "node --check netlify/functions/leaderboard.mjs && node --check netlify/functions/participant.mjs && node --check netlify/functions/sync-now.mjs && node --check netlify/functions/sync-start.mjs && node --check netlify/functions/sync-status.mjs && node --check netlify/functions/sync-background.mjs && node --check netlify/functions/sync.mjs && node --check netlify/functions/debug-mapping.mjs",
+    "check": "node --check netlify/functions/leaderboard.mjs && node --check netlify/functions/participant.mjs && node --check netlify/functions/sync-now.mjs && node --check netlify/functions/sync-start.mjs && node --check netlify/functions/sync-status.mjs && node --check netlify/functions/sync-background.mjs && node --check netlify/functions/sync.mjs && node --check netlify/functions/_lib/resultsOnlySyncCore.mjs && node --check netlify/functions/debug-mapping.mjs",
     "deploy": "netlify deploy --prod"
   },
   "dependencies": {

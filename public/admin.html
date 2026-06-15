@@ -20,7 +20,7 @@
       <section class="panel admin-panel">
         <label for="secret">ADMIN_SECRET</label>
         <input id="secret" type="password" autocomplete="current-password" placeholder="Paste your admin secret" />
-        <button id="syncBtn" class="primary-button" type="button">Run sync</button>
+        <button id="syncBtn" class="primary-button" type="button">Run full sync</button>
         <button id="statusBtn" class="ghost-button" type="button">Check last sync</button>
         <button id="debugBtn" class="ghost-button" type="button">Check API mapping</button>
         <pre id="output" class="output">Ready.</pre>
@@ -175,7 +175,7 @@
 
       btn.addEventListener('click', async () => {
         btn.disabled = true;
-        output.textContent = 'Starting background sync…';
+        output.textContent = 'Starting full sync in the background…';
 
         try {
           const data = await fetchJsonOrShow('/.netlify/functions/sync-start', {

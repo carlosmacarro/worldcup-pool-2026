@@ -30,8 +30,8 @@ No Supabase schema change is required for this version. Replace the changed file
 - `public/participant.html` — participant detail page with Group stage / Knockout phase buttons
 - `netlify/functions/leaderboard.mjs` — public leaderboard API, group-stage by default
 - `netlify/functions/participant.mjs` — public participant bets API
-- `netlify/functions/sync.mjs` — scheduled sync every 5 minutes
-- `netlify/functions/sync-now.mjs` — manual sync endpoint
+- `netlify/functions/sync.mjs` — scheduled results-only sync every 5 minutes
+- `netlify/functions/sync-now.mjs` — manual full sync endpoint
 - `supabase_schema.sql` — database tables
 - Excel parser for your workbook structure:
   - sheet: `WORLDCUP`
@@ -166,7 +166,7 @@ After deploying, open:
 https://YOUR-SITE.netlify.app/admin.html
 ```
 
-Paste your `ADMIN_SECRET` and press **Run sync**.
+Paste your `ADMIN_SECRET` and press **Run full sync**. Use this after uploading or changing Excel files.
 
 Then open:
 
@@ -181,10 +181,10 @@ Share that homepage link with your friends.
 ## 6. How updates work
 
 - `sync.mjs` runs every 5 minutes using Netlify Scheduled Functions.
-- It reads all Excel files from Drive.
-- It fetches the World Cup matches from football-data.org.
-- It stores everything in Supabase.
-- The phone website refreshes the leaderboard every 30 seconds.
+- The automatic scheduled sync is now **results-only**: it does not read Google Drive and does not parse Excel files.
+- It reuses the predictions already stored in Supabase, fetches World Cup matches from football-data.org, and updates only the `matches` table.
+- The phone website refreshes the leaderboard every 30 seconds from cached Supabase data.
+- When you upload new Excel files or someone edits their bets, go to `/admin.html` and press **Run full sync**. That manual full sync reads Drive, imports Excels, and refreshes results.
 
 To change the scheduled sync frequency, edit this line in `netlify/functions/sync.mjs`:
 
@@ -199,6 +199,39 @@ schedule: '*/1 * * * *'  // every minute
 schedule: '*/15 * * * *' // every 15 minutes
 schedule: '@hourly'      // hourly
 ```
+
+
+---
+
+## 2026-06 results-only automatic sync
+
+To reduce Netlify function/compute usage while keeping updates every 5 minutes, the scheduled function now runs a lightweight **results-only** sync.
+
+Automatic every 5 minutes:
+
+```text
+Supabase predictions already imported
+        ↓
+football-data.org results
+        ↓
+Supabase matches table updated
+```
+
+It does **not** list Google Drive files, download workbooks, or parse Excel during automatic runs.
+
+Manual admin full sync:
+
+```text
+Google Drive Excels
+        ↓
+Supabase participants + predictions
+        ↓
+football-data.org results
+        ↓
+Supabase matches table updated
+```
+
+Use `/admin.html → Run full sync` only after uploading, deleting, or editing Excel files.
 
 ---
 
@@ -263,7 +296,7 @@ netlify/functions/sync-background.mjs
 package.json
 ```
 
-After deploying these files, open `/admin.html`, paste `ADMIN_SECRET`, and click **Run sync**. The page will show the latest sync status from the `sync_logs` table.
+After deploying these files, open `/admin.html`, paste `ADMIN_SECRET`, and click **Run full sync**. The page will show the latest sync status from the `sync_logs` table.
 
 ---
 

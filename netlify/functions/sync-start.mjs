@@ -41,7 +41,7 @@ export default async function handler(req) {
       queued: true,
       status: queued.status,
       startedAt,
-      message: 'Sync started in the background. This can take a little while if there are many Excel files.'
+      message: 'Full sync started in the background. This can take a little while if there are many Excel files. Automatic syncs are results-only and keep running every 5 minutes.'
     });
   } catch (error) {
     console.error(error);
