@@ -428,3 +428,11 @@ do not keep appearing in participant knockout pages.
 If a finished group match stays pending, use **Admin → Check API mapping**. The
 diagnostic will show whether the API result was returned but rejected because of
 a team alias/date mismatch. In that case, fix the alias or use `MATCH_API_ID_OVERRIDES`.
+
+### Latest fix: Spain / Cabo Verde mapping
+
+If `España - Cabo Verde` stays pending while football-data.org already has a score,
+the likely cause is another team-name variant from the API. The normalizer now maps
+`España`, `Spain`, `ESP`, `Cabo Verde`, `Cape Verde`, `Cape Verde Islands`,
+`Cabo Verde Islands`, and `CPV` to the same canonical teams. After deploying, run
+**Admin → Run full sync** once, then **Check API mapping** if the row still stays pending.
