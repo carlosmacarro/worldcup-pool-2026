@@ -11,8 +11,8 @@ function scoreValue(scoreObj, key) {
 
 export function pickScore(match) {
   const status = normalizedStatus(match);
-  const homeFT = match?.score?.fullTime?.home ?? 0;
-  const awayFT = match?.score?.fullTime?.away ?? 0;
+  const homeRT = match?.score?.regularTime?.home ?? 0;
+  const awayRT = match?.score?.regularTime?.away ?? 0;
 
   const homeET = match?.score?.extraTime?.home ?? 0;
   const awayET = match?.score?.extraTime?.away ?? 0;
@@ -48,9 +48,9 @@ export function pickScore(match) {
   if (isFinished) {
     // final result includes extra time but excludes penalties
     return {
-      home: homeFT + homeET,
-      away: awayFT + awayET,
-      source: "final_with_extra_time"
+      home: homeRT + homeET,
+      away: awayRT + awayET,
+      source: "regular_with_extra_time"
     };
   }
 
