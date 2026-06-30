@@ -11,11 +11,11 @@ function scoreValue(scoreObj, key) {
 
 export function pickScore(match) {
   const status = normalizedStatus(match);
-  const homeRT = match?.score?.regularTime?.home ?? 0;
-  const awayRT = match?.score?.regularTime?.away ?? 0;
+  const homeRT = scoreValue(match?.score?.regularTime, 'home');
+  const awayRT = scoreValue(match?.score?.regularTime, 'away');
 
-  const homeET = match?.score?.extraTime?.home ?? 0;
-  const awayET = match?.score?.extraTime?.away ?? 0;
+  const homeET = scoreValue(match?.score?.extraTime, 'home');
+  const awayET = scoreValue(match?.score?.extraTime, 'away');
 
   const isFinished =
     status === "FINISHED" ||
