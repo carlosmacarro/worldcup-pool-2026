@@ -42,8 +42,10 @@ export function pickScore(match) {
       const away = scoreValue(candidate.value, 'away');
       if (Number.isFinite(home) && Number.isFinite(away)) {
         if (Number.isFinite(homeP) && Number.isFinite(awayP)) {
-          home = home - homeP
-          away = away - awayP
+          return {
+            home: home - homeP,
+            away: away - awayP,
+            source: candidate.source };
         }
         return { home, away, source: candidate.source };
       }
