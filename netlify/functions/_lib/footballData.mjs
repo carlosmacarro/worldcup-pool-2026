@@ -10,24 +10,24 @@ function scoreValue(scoreObj, key) {
 }
 
 export function pickScore(match) {
-  const status = normalizedStatus(match);
-  const homeRT = scoreValue(match?.score?.regularTime, 'home');
-  const awayRT = scoreValue(match?.score?.regularTime, 'away');
+  //const status = normalizedStatus(match);
+  //const homeRT = scoreValue(match?.score?.regularTime, 'home');
+  //const awayRT = scoreValue(match?.score?.regularTime, 'away');
 
-  const homeET = scoreValue(match?.score?.extraTime, 'home');
-  const awayET = scoreValue(match?.score?.extraTime, 'away');
+  //const homeET = scoreValue(match?.score?.extraTime, 'home');
+  //const awayET = scoreValue(match?.score?.extraTime, 'away');
 
-  const isFinished =
-    status === "FINISHED" ||
-    status === "FT" ||
-    status === "AET"; // some APIs use "after extra time"
+  //const isFinished =
+    //status === "FINISHED" ||
+    //status === "FT" ||
+    //status === "AET"; // some APIs use "after extra time"
 
-  const isLive =
-    status === "LIVE" ||
-    status === "IN_PLAY" ||
-    status === "PAUSED";
+  //const isLive =
+    //status === "LIVE" ||
+    //status === "IN_PLAY" ||
+    //status === "PAUSED";
 
-  if (isLive) {
+  //if (isLive) {
     // during live match: fullTime is actually the current score
       const candidates = [
       { value: match?.score?.fullTime, source: 'fullTime' },
@@ -35,24 +35,29 @@ export function pickScore(match) {
       { value: match?.score?.current, source: 'liveOrPartial' },
       { value: match?.score?.halfTime, source: 'halfTime' }
     ];
-  
+    const homeP = scoreValue(match?.score?.penalties, 'home');
+    const awayP = scoreValue(match?.score?.penalties, 'away');
     for (const candidate of candidates) {
       const home = scoreValue(candidate.value, 'home');
       const away = scoreValue(candidate.value, 'away');
       if (Number.isFinite(home) && Number.isFinite(away)) {
+        if (Number.isFinite(homeP) && Number.isFinite(awayP)) {
+          home = home - homeP
+          away = away - awayP
+        }
         return { home, away, source: candidate.source };
       }
     }
-  }
+  //}
   
-  if (isFinished) {
+  //if (isFinished) {
     // final result includes extra time but excludes penalties
-    return {
-      home: homeRT + homeET,
-      away: awayRT + awayET,
-      source: "regular_with_extra_time"
-    };
-  }
+    //return {
+      //home: homeRT + homeET,
+      //away: awayRT + awayET,
+      //source: "regular_with_extra_time"
+    //};
+  //}
 
   return { home: null, away: null, source: null };
 }
