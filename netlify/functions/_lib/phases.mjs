@@ -12,16 +12,16 @@ export const GROUP_STAGE_MAX_MATCH_NO = 72;
 // If your Excel template numbers knockout matches differently, adjust the
 // ranges below (and KNOCKOUT_API_ROUND_ORDER in knockoutMatches.mjs) to match.
 export const KNOCKOUT_ROUNDS = [
-  { key: 'RO32', label: 'Dieciseisavos de final', from: 73, to: 88, points: { exact: 2, goalDifference: 3, winner: 4 } },
-  { key: 'RO16', label: 'Octavos de final', from: 89, to: 96, points: { exact: 3, goalDifference: 4, winner: 5 } },
-  { key: 'QF', label: 'Cuartos de final', from: 97, to: 100, points: { exact: 4, goalDifference: 5, winner: 6 } },
-  { key: 'SF', label: 'Semifinales', from: 101, to: 102, points: { exact: 5, goalDifference: 6, winner: 7 } },
+  { key: 'RO32', label: 'Dieciseisavos de final', from: 73, to: 88, points: { exact: 4, goalDifference: 3, winner: 2 } },
+  { key: 'RO16', label: 'Octavos de final', from: 89, to: 96, points: { exact: 5, goalDifference: 4, winner: 3 } },
+  { key: 'QF', label: 'Cuartos de final', from: 97, to: 100, points: { exact: 6, goalDifference: 5, winner: 4 } },
+  { key: 'SF', label: 'Semifinales', from: 101, to: 102, points: { exact: 7, goalDifference: 6, winner: 5 } },
   // Third-place match was not specified by name in the points scale you gave us.
   // Defaulting it to the same scale as the semi-finals since it is contested by
   // two semi-final losers. Change this if you'd rather it score like the final
   // or like its own tier.
-  { key: 'THIRD_PLACE', label: 'Tercer y cuarto puesto', from: 103, to: 103, points: { exact: 5, goalDifference: 6, winner: 7 } },
-  { key: 'FINAL', label: 'Final', from: 104, to: 104, points: { exact: 6, goalDifference: 7, winner: 8 } }
+  { key: 'THIRD_PLACE', label: 'Tercer y cuarto puesto', from: 103, to: 103, points: { exact: 7, goalDifference: 6, winner: 5 } },
+  { key: 'FINAL', label: 'Final', from: 104, to: 104, points: { exact: 8, goalDifference: 7, winner: 6 } }
 ];
 
 export function knockoutRoundForMatchNo(matchNo) {
