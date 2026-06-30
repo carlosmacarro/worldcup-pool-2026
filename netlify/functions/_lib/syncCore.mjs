@@ -1,7 +1,8 @@
 import { getSupabase } from './db.mjs';
-import { listExcelFilesInDriveFolder, downloadDriveFileBuffer } from './googleDrive.mjs';
+import { listExcelFilesByPhase, downloadDriveFileBuffer } from './googleDrive.mjs';
 import { parsePredictionsFromExcelBuffer } from './xlsxParser.mjs';
 import { fetchFootballDataMatches, mapFootballDataMatches } from './footballData.mjs';
+import { mapKnockoutMatches } from './knockoutMatches.mjs';
 import { getConfig } from './config.mjs';
 import { GROUP_STAGE_MAX_MATCH_NO, isPhaseMatch } from './phases.mjs';
 
@@ -62,7 +63,6 @@ function disambiguateParticipantKeys(parsedFiles, warnings) {
   }
 }
 
-
 function buildExcelFixturesFromParsedFiles(parsedFiles) {
   const fixturesByMatchNo = new Map();
 
@@ -85,32 +85,65 @@ function buildExcelFixturesFromParsedFiles(parsedFiles) {
   return [...fixturesByMatchNo.values()].sort((a, b) => a.match_no - b.match_no);
 }
 
-async function syncPredictionsFromDrive(supabase, warnings) {
-  const files = await listExcelFilesInDriveFolder();
-  if (!files.length) warnings.push({ message: 'No Excel files found in Google Drive folder.' });
-
+/**
+ * Parses every Excel in a Drive folder listing, restricted to a single phase
+ * of predictions (group rows only, or knockout rows only).
+ */
+async function parseFilesForPhase(files, phaseFilter, warnings) {
   const parsedFiles = [];
-
   for (const file of files) {
     try {
       const buffer = await downloadDriveFileBuffer(file.id);
-      const parsed = parsePredictionsFromExcelBuffer(buffer, file);
+      const parsed = parsePredictionsFromExcelBuffer(buffer, file, { phaseFilter });
       warnings.push(...parsed.warnings);
       parsedFiles.push(parsed);
     } catch (error) {
       warnings.push({ file: file.name, message: error.message || String(error) });
     }
   }
-
   disambiguateParticipantKeys(parsedFiles, warnings);
+  return parsedFiles;
+}
 
-  const participants = parsedFiles.map((p) => p.participant);
+/**
+ * Replaces ONLY the predictions in [matchNoFrom, matchNoTo] for a participant,
+ * leaving predictions for the other phase (and other participants) untouched.
+ * This is what lets group-stage points survive once Eliminatoria Excels start
+ * being uploaded, and vice versa.
+ */
+async function replacePredictionsInRange(supabase, participantKey, matchNoFrom, matchNoTo, predictions) {
+  let deleteQuery = supabase.from('predictions').delete().eq('participant_key', participantKey);
+  if (matchNoFrom != null) deleteQuery = deleteQuery.gte('match_no', matchNoFrom);
+  if (matchNoTo != null) deleteQuery = deleteQuery.lte('match_no', matchNoTo);
+  const { error: deleteError } = await deleteQuery;
+  if (deleteError) throw deleteError;
+  await upsertChunked(supabase, 'predictions', predictions, 'participant_key,match_no');
+}
+
+async function syncPredictionsFromDrive(supabase, warnings) {
+  const { groupFiles, knockoutFiles, eliminatoriaFolderId } = await listExcelFilesByPhase();
+
+  if (!groupFiles.length) warnings.push({ message: 'No Excel files found in the root Google Drive folder (group-stage bets).' });
+  if (!eliminatoriaFolderId) {
+    warnings.push({ message: "No 'Eliminatoria' subfolder found yet. Create it in Drive and upload knockout-phase Excels there when ready." });
+  } else if (!knockoutFiles.length) {
+    warnings.push({ message: "'Eliminatoria' folder exists but has no Excel files yet." });
+  }
+
+  const groupParsed = await parseFilesForPhase(groupFiles, 'group', warnings);
+  const knockoutParsed = await parseFilesForPhase(knockoutFiles, 'knockout', warnings);
+
+  // Participants are identity-owned by the root folder. The Eliminatoria
+  // file's predictions get merged onto the same participant_key (matched by
+  // the participant's name -> slug), since it's the same person's name cell.
+  const participants = groupParsed.map((p) => p.participant);
   const currentKeys = new Set(participants.map((p) => p.participant_key));
 
   if (participants.length) {
     await upsertChunked(supabase, 'participants', participants, 'participant_key');
 
-    // Remove people who were deleted from the Drive folder.
+    // Remove people who were deleted from the root Drive folder. Their
+    // knockout predictions (if any) are cascade-deleted by the FK.
     const { data: existing, error } = await supabase.from('participants').select('participant_key');
     if (error) throw error;
     const staleKeys = (existing || []).map((p) => p.participant_key).filter((key) => !currentKeys.has(key));
@@ -119,44 +152,57 @@ async function syncPredictionsFromDrive(supabase, warnings) {
       if (deleteError) throw deleteError;
     }
 
-    // Replace predictions per participant so removed/blanked predictions do not remain in the database.
-    for (const parsed of parsedFiles) {
-      const { error: deleteError } = await supabase
-        .from('predictions')
-        .delete()
-        .eq('participant_key', parsed.participant.participant_key);
-      if (deleteError) throw deleteError;
-      await upsertChunked(supabase, 'predictions', parsed.predictions, 'participant_key,match_no');
+    // Replace only the group-stage rows (match_no 1-72) per participant.
+    for (const parsed of groupParsed) {
+      await replacePredictionsInRange(supabase, parsed.participant.participant_key, 1, GROUP_STAGE_MAX_MATCH_NO, parsed.predictions);
     }
+  }
+
+  // Replace only the knockout rows (match_no > 72) per participant, matched
+  // by name against the participant created from their root-folder file.
+  for (const parsed of knockoutParsed) {
+    const knockoutKey = parsed.participant.participant_key;
+    const matchedParticipant = participants.find((p) => p.participant_key === knockoutKey);
+
+    if (!matchedParticipant) {
+      warnings.push({
+        file: parsed.participant.file_name,
+        message: `Eliminatoria file's participant name didn't match anyone in the root folder (key '${knockoutKey}'). Knockout bets were not saved - make sure the name in the Home sheet matches the original Excel exactly.`
+      });
+      continue;
+    }
+
+    const predictions = parsed.predictions.map((p) => ({ ...p, participant_key: knockoutKey }));
+    await replacePredictionsInRange(supabase, knockoutKey, GROUP_STAGE_MAX_MATCH_NO + 1, null, predictions);
   }
 
   return {
     participantsCount: participants.length,
-    predictionsCount: parsedFiles.reduce((sum, p) => sum + p.predictions.length, 0),
-    excelFixtures: buildExcelFixturesFromParsedFiles(parsedFiles)
+    predictionsCount:
+      groupParsed.reduce((sum, p) => sum + p.predictions.length, 0) +
+      knockoutParsed.reduce((sum, p) => sum + p.predictions.length, 0),
+    excelFixtures: buildExcelFixturesFromParsedFiles(groupParsed)
   };
 }
 
 async function syncMatchesFromFootballData(supabase, excelFixtures = [], warnings = []) {
   const cfg = getConfig();
   const apiMatches = await fetchFootballDataMatches();
-  const mappedMatches = mapFootballDataMatches(apiMatches, {
+
+  const mappedGroupMatches = mapFootballDataMatches(apiMatches, {
     countLiveMatches: cfg.countLiveMatches,
     excelFixtures,
     warnings
   });
-  await upsertChunked(supabase, 'matches', mappedMatches, 'match_no');
+  const mappedKnockoutMatches = mapKnockoutMatches(apiMatches, {
+    countLiveMatches: cfg.countLiveMatches,
+    warnings
+  });
 
-  // The public leaderboard is currently group-stage only. Older versions could
-  // create rows 73+ by appending unmatched API matches, which made real results
-  // appear beside knockout bets. Remove those stale rows on every sync.
-  const { error: cleanupError } = await supabase
-    .from('matches')
-    .delete()
-    .gt('match_no', GROUP_STAGE_MAX_MATCH_NO);
-  if (cleanupError) throw cleanupError;
+  await upsertChunked(supabase, 'matches', mappedGroupMatches, 'match_no');
+  await upsertChunked(supabase, 'matches', mappedKnockoutMatches, 'match_no');
 
-  return { matchesCount: mappedMatches.length };
+  return { matchesCount: mappedGroupMatches.length + mappedKnockoutMatches.length };
 }
 
 export async function runSync({ source = 'manual' } = {}) {

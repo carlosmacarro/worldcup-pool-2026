@@ -214,6 +214,7 @@ h1 {
 .pill.diff { color: #fde68a; }
 .pill.winner { color: #bfdbfe; }
 .pill.miss { color: #fecaca; }
+.pill.bonus { color: #d8b4fe; }
 
 .matches {
   display: grid;

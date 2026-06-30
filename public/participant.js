@@ -42,11 +42,17 @@ function scoreText(bet) {
   return `${bet.actual.home}–${bet.actual.away}`;
 }
 
-function pointClass(points) {
-  if (points === 3) return 'exact';
-  if (points === 2) return 'diff';
-  if (points === 1) return 'winner';
+function pointClass(bet) {
+  if (bet.type === 'exact') return 'exact';
+  if (bet.type === 'goal-difference') return 'diff';
+  if (bet.type === 'winner') return 'winner';
   return 'miss';
+}
+
+function pointsLabel(bet) {
+  if (bet.type === 'pending') return 'Pending';
+  if (bet.type === 'wrong-matchup') return 'Cruce no jugado · 0 pts';
+  return `${bet.points} pts`;
 }
 
 function renderBets(bets) {
@@ -59,11 +65,11 @@ function renderBets(bets) {
   for (const bet of bets) {
     const card = document.createElement('article');
     card.className = 'bet-card';
-    const pointsLabel = bet.type === 'pending' ? 'Pending' : `${bet.points} pts`;
+    const pointsLabelText = pointsLabel(bet);
     card.innerHTML = `
       <div class="bet-header">
-        <span class="match-no">#${bet.matchNo}</span>
-        <span class="pill ${pointClass(bet.points)}">${pointsLabel}</span>
+        <span class="match-no">#${bet.matchNo}${bet.roundLabel ? ` · ${escapeHtml(bet.roundLabel)}` : ''}</span>
+        <span class="pill ${pointClass(bet)}">${pointsLabelText}</span>
       </div>
       <div class="bet-teams">${escapeHtml(bet.homeTeam || 'TBD')} <strong>${bet.predicted.home}–${bet.predicted.away}</strong> ${escapeHtml(bet.awayTeam || 'TBD')}</div>
       <div class="bet-meta">

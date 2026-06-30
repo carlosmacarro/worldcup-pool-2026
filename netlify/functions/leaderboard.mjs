@@ -6,7 +6,7 @@ export default async function handler(req) {
 
   try {
     const url = getRequestUrl(req);
-    const phase = url.searchParams.get('phase') || 'group';
+    const phase = url.searchParams.get('phase') || 'all';
     const data = await buildLeaderboard({ phase });
     return jsonResponse(data);
   } catch (error) {

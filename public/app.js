@@ -55,10 +55,27 @@ function renderLeaderboard(rows) {
     node.querySelector('.rank').textContent = row.rank === 1 ? '🏆' : `#${row.rank}`;
     node.querySelector('h3').textContent = row.name;
     node.querySelector('.points').textContent = `${row.total} pts`;
-    node.querySelector('.exact').textContent = `3 pts: ${row.exact}`;
-    node.querySelector('.diff').textContent = `2 pts: ${row.goalDifference}`;
-    node.querySelector('.winner').textContent = `1 pt: ${row.winner}`;
-    node.querySelector('.miss').textContent = `0 pts: ${row.miss}`;
+    node.querySelector('.exact').textContent = `Exactos: ${row.exact}`;
+    node.querySelector('.diff').textContent = `Resultado: ${row.goalDifference}`;
+    node.querySelector('.winner').textContent = `Ganador: ${row.winner}`;
+    node.querySelector('.miss').textContent = `Fallos: ${row.miss}`;
+
+    const pillRow = node.querySelector('.pill-row');
+    if (pillRow && (row.groupPosition || row.special)) {
+      if (row.groupPosition) {
+        const pill = document.createElement('span');
+        pill.className = 'pill bonus';
+        pill.textContent = `Posición grupo: +${row.groupPosition}`;
+        pillRow.appendChild(pill);
+      }
+      if (row.special) {
+        const pill = document.createElement('span');
+        pill.className = 'pill bonus';
+        pill.textContent = `Especiales: +${row.special}`;
+        pillRow.appendChild(pill);
+      }
+    }
+
     elements.leaderboard.appendChild(node);
   }
 }
@@ -161,8 +178,8 @@ function selectMatchesToShow(matches) {
     .sort((a, b) => byKickoffThenMatchNo(b, a));
 
   return {
-    title: 'Reultados recientes',
-    subtitle: 'Fase de grupos finalizada',
+    title: 'Resultados recientes',
+    subtitle: '',
     matches: recentFinished.slice(0, MAX_MATCH_CARDS)
   };
 }
@@ -175,7 +192,7 @@ function renderMatches(matches) {
   if (elements.matchesSubtitle) elements.matchesSubtitle.textContent = selection.subtitle;
 
   if (!selection.matches.length) {
-    elements.matches.innerHTML = '<p class="subtitle">No group-stage matches available yet.</p>';
+    elements.matches.innerHTML = '<p class="subtitle">No matches available yet.</p>';
     return;
   }
 
@@ -229,7 +246,7 @@ function setActiveTab(tabId, updateUrl = false) {
 async function loadLeaderboard() {
   elements.refreshBtn.disabled = true;
   try {
-    const response = await fetch('/.netlify/functions/leaderboard?phase=group', { cache: 'no-store' });
+    const response = await fetch('/.netlify/functions/leaderboard?phase=all', { cache: 'no-store' });
     const data = await response.json();
     if (!response.ok || data.error) throw new Error(data.error || 'Could not load leaderboard');
 
@@ -241,9 +258,9 @@ async function loadLeaderboard() {
     if (data.lastSync?.ok === false) {
       setStatus(`Last sync failed: ${data.lastSync.error || 'Unknown error'}`, 'error');
     } else if (data.lastSync?.warnings?.length) {
-      setStatus(`Group-stage leaderboard loaded. ${data.lastSync.warnings.length} sync warning(s). Check /admin.html for details.`, 'ok');
+      setStatus(`Leaderboard loaded. ${data.lastSync.warnings.length} sync warning(s). Check /admin.html for details.`, 'ok');
     } else {
-      setStatus('Group-stage leaderboard loaded.', 'ok');
+      setStatus('Leaderboard loaded.', 'ok');
     }
 
     renderLeaderboard(data.leaderboard || []);

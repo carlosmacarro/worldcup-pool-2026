@@ -1,10 +1,22 @@
 import { fetchAll } from './db.mjs';
-import { scorePrediction, pointType } from './scoring.mjs';
-import { normalizePhase, getPhaseLabel, isPhaseMatch, phaseForMatchLike } from './phases.mjs';
+import { scorePrediction, pointType, scoreKnockoutPrediction, scoreGroupPosition, scoreSpecialPrediction, GROUP_POSITION_POINTS, SPECIAL_CATEGORY_POINTS } from './scoring.mjs';
+import { normalizePhase, getPhaseLabel, isPhaseMatch, phaseForMatchLike, knockoutRoundForMatchNo } from './phases.mjs';
 
 const LIVE_STATUSES = new Set(['IN_PLAY', 'LIVE', 'PAUSED']);
 const FINAL_STATUSES = new Set(['FINISHED', 'AWARDED', 'AFTER_EXTRA_TIME', 'PENALTY_SHOOTOUT']);
 const NOT_STARTED_STATUSES = new Set(['SCHEDULED', 'TIMED', 'POSTPONED', 'CANCELLED', 'CANCELED', 'SUSPENDED']);
+
+// Tables for the group-position bonus and tournament-wide special awards are
+// optional add-ons (see supabase_schema.sql). If they haven't been created
+// yet in Supabase, fail soft so the rest of the leaderboard keeps working.
+async function safeFetchAll(table, opts) {
+  try {
+    return await fetchAll(table, opts);
+  } catch (error) {
+    console.warn(`Optional table '${table}' not available yet:`, error.message || error);
+    return [];
+  }
+}
 
 function hasNumericScore(match) {
   return Number.isFinite(Number(match?.real_home)) && Number.isFinite(Number(match?.real_away));
@@ -18,7 +30,6 @@ function effectiveIsScorable(match) {
 
   // Robust fallback: if the API has already stored a real score for a finished/final-like
   // or live match, score it even if the older sync wrote is_scorable=false.
-  // This fixes cases where match cards show live/recent scores but the leaderboard remains pending.
   if (FINAL_STATUSES.has(status) || LIVE_STATUSES.has(status)) return true;
 
   // Some APIs briefly return a score with a generic/unknown status after kickoff.
@@ -41,6 +52,8 @@ function createParticipantSummary(participant, phase = 'group') {
     miss: 0,
     played: 0,
     pending: 0,
+    groupPosition: 0,
+    special: 0,
     breakdown: []
   };
 }
@@ -72,7 +85,7 @@ function latestSyncSummary(logs) {
     : null;
 }
 
-function applyPredictionToParticipant(participant, prediction, match) {
+function applyGroupPrediction(participant, prediction, match) {
   const isScorable = effectiveIsScorable(match);
   let points = 0;
   let type = 'pending';
@@ -90,14 +103,12 @@ function applyPredictionToParticipant(participant, prediction, match) {
     participant.pending += 1;
   }
 
-  const bet = {
+  return {
     matchNo: prediction.match_no,
-    phase: phaseForMatchLike(prediction),
+    phase: 'group',
     roundLabel: prediction.round_label || null,
     kickoff: prediction.kickoff || match?.kickoff,
     status: match?.status || 'PENDING',
-    // Participant detail pages should always show the teams as they appear in the user's Excel bet.
-    // Match rows are still used for actual scores and points.
     homeTeam: prediction.home_team || match?.home_team,
     awayTeam: prediction.away_team || match?.away_team,
     predicted: { home: prediction.pred_home, away: prediction.pred_away },
@@ -107,17 +118,101 @@ function applyPredictionToParticipant(participant, prediction, match) {
       source: match?.score_source || null
     },
     points,
-    type
+    type,
+    maxPoints: 3
   };
+}
 
+function applyKnockoutPrediction(participant, prediction, match) {
+  const { points, type, round } = scoreKnockoutPrediction(prediction, match);
+  const isScorable = effectiveIsScorable(match) || type === 'wrong-matchup';
+
+  if (isScorable) {
+    participant.total += points;
+    participant.played += 1;
+    if (type === 'exact') participant.exact += 1;
+    else if (type === 'goal-difference') participant.goalDifference += 1;
+    else if (type === 'winner') participant.winner += 1;
+    else participant.miss += 1;
+  } else {
+    participant.pending += 1;
+  }
+
+  return {
+    matchNo: prediction.match_no,
+    phase: 'knockout',
+    round: round?.key || null,
+    roundLabel: round?.label || prediction.round_label || null,
+    kickoff: prediction.kickoff || match?.kickoff,
+    status: match?.status || 'PENDING',
+    homeTeam: prediction.home_team || match?.home_team,
+    awayTeam: prediction.away_team || match?.away_team,
+    predicted: { home: prediction.pred_home, away: prediction.pred_away },
+    actual: {
+      home: match?.real_home ?? null,
+      away: match?.real_away ?? null,
+      source: match?.score_source || null
+    },
+    points,
+    type,
+    maxPoints: round?.points?.winner ?? null
+  };
+}
+
+function applyPredictionToParticipant(participant, prediction, match) {
+  const bet = isPhaseMatch(prediction, 'knockout')
+    ? applyKnockoutPrediction(participant, prediction, match)
+    : applyGroupPrediction(participant, prediction, match);
   participant.breakdown.push(bet);
   return bet;
+}
+
+function applyGroupPositionBonuses(participant, predictedPositions, actualStandingsByGroup) {
+  for (const predicted of predictedPositions) {
+    const actualTeam = actualStandingsByGroup.get(`${predicted.group_name}__${predicted.position}`);
+    const points = scoreGroupPosition(predicted.team, actualTeam);
+    if (points > 0) {
+      participant.groupPosition += points;
+      participant.total += points;
+    }
+    participant.breakdown.push({
+      phase: 'group-position',
+      groupName: predicted.group_name,
+      position: predicted.position,
+      predictedTeam: predicted.team,
+      actualTeam: actualTeam || null,
+      points,
+      maxPoints: GROUP_POSITION_POINTS,
+      type: actualTeam ? (points > 0 ? 'exact' : 'miss') : 'pending'
+    });
+  }
+}
+
+function applySpecialBonuses(participant, predictions, resultsByCategory) {
+  for (const prediction of predictions) {
+    const actualValue = resultsByCategory.get(prediction.category);
+    const points = scoreSpecialPrediction(prediction.category, prediction.predicted_value, actualValue);
+    if (points > 0) {
+      participant.special += points;
+      participant.total += points;
+    }
+    participant.breakdown.push({
+      phase: 'special',
+      category: prediction.category,
+      predictedValue: prediction.predicted_value,
+      actualValue: actualValue || null,
+      points,
+      maxPoints: SPECIAL_CATEGORY_POINTS[prediction.category] || 0,
+      type: actualValue ? (points > 0 ? 'exact' : 'miss') : 'pending'
+    });
+  }
 }
 
 function matchDto(match) {
   return {
     matchNo: match.match_no,
     phase: phaseForMatchLike(match),
+    round: knockoutRoundForMatchNo(match.match_no)?.key || null,
     kickoff: match.kickoff,
     status: match.status,
     stage: match.stage,
@@ -145,10 +240,28 @@ function buildParticipantsList(participants, leaderboardByKey) {
         miss: summary?.miss ?? 0,
         played: summary?.played ?? 0,
         pending: summary?.pending ?? 0,
+        groupPosition: summary?.groupPosition ?? 0,
+        special: summary?.special ?? 0,
         rank: summary?.rank ?? null
       };
     })
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function loadBonusData() {
+  const [groupPositionPredictions, groupStandings, specialPredictions, specialResults] = await Promise.all([
+    safeFetchAll('group_position_predictions'),
+    safeFetchAll('group_standings'),
+    safeFetchAll('special_predictions'),
+    safeFetchAll('special_results')
+  ]);
+
+  const actualStandingsByGroup = new Map(
+    groupStandings.map((row) => [`${row.group_name}__${row.position}`, row.team])
+  );
+  const resultsByCategory = new Map(specialResults.map((row) => [row.category, row.actual_value]));
+
+  return { groupPositionPredictions, specialPredictions, actualStandingsByGroup, resultsByCategory };
 }
 
 export async function buildLeaderboard({ phase = 'group' } = {}) {
@@ -171,6 +284,27 @@ export async function buildLeaderboard({ phase = 'group' } = {}) {
     const participant = participantMap.get(prediction.participant_key);
     if (!participant) continue;
     applyPredictionToParticipant(participant, prediction, match);
+  }
+
+  // Group-position and special-award bonuses are tournament-wide, so they
+  // only apply to the combined "all" view, not the per-phase group/knockout tabs.
+  if (selectedPhase === 'all') {
+    const { groupPositionPredictions, specialPredictions, actualStandingsByGroup, resultsByCategory } = await loadBonusData();
+    const positionsByParticipant = new Map();
+    for (const row of groupPositionPredictions) {
+      if (!positionsByParticipant.has(row.participant_key)) positionsByParticipant.set(row.participant_key, []);
+      positionsByParticipant.get(row.participant_key).push(row);
+    }
+    const specialsByParticipant = new Map();
+    for (const row of specialPredictions) {
+      if (!specialsByParticipant.has(row.participant_key)) specialsByParticipant.set(row.participant_key, []);
+      specialsByParticipant.get(row.participant_key).push(row);
+    }
+
+    for (const participant of participantMap.values()) {
+      applyGroupPositionBonuses(participant, positionsByParticipant.get(participant.participantKey) || [], actualStandingsByGroup);
+      applySpecialBonuses(participant, specialsByParticipant.get(participant.participantKey) || [], resultsByCategory);
+    }
   }
 
   const sorted = [...participantMap.values()].sort(compareLeaders);
@@ -230,7 +364,13 @@ export async function buildParticipantBets(participantKey, { phase = 'group' } =
     applyPredictionToParticipant(summary, prediction, matchMap.get(prediction.match_no));
   }
 
-  summary.breakdown.sort((a, b) => a.matchNo - b.matchNo);
+  if (selectedPhase === 'all') {
+    const { groupPositionPredictions, specialPredictions, actualStandingsByGroup, resultsByCategory } = await loadBonusData();
+    applyGroupPositionBonuses(summary, groupPositionPredictions.filter((r) => r.participant_key === participantKey), actualStandingsByGroup);
+    applySpecialBonuses(summary, specialPredictions.filter((r) => r.participant_key === participantKey), resultsByCategory);
+  }
+
+  summary.breakdown.sort((a, b) => (a.matchNo ?? 0) - (b.matchNo ?? 0));
 
   return {
     ok: true,
@@ -252,6 +392,8 @@ export async function buildParticipantBets(participantKey, { phase = 'group' } =
       miss: summary.miss,
       played: summary.played,
       pending: summary.pending,
+      groupPosition: summary.groupPosition,
+      special: summary.special,
       bets: summary.breakdown.length
     },
     bets: summary.breakdown

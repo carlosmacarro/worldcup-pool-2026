@@ -1,6 +1,7 @@
 import XLSX from 'xlsx';
 import { getConfig } from './config.mjs';
 import { slugifyParticipantName } from './normalise.mjs';
+import { GROUP_STAGE_MAX_MATCH_NO } from './phases.mjs';
 
 const SHEET_NAME = 'WORLDCUP';
 
@@ -154,7 +155,19 @@ function getParticipantName(workbook, fallbackFileName) {
     .trim() || fallbackFileName;
 }
 
-export function parsePredictionsFromExcelBuffer(buffer, fileMeta = {}) {
+/**
+ * @param {Buffer} buffer
+ * @param {object} fileMeta
+ * @param {object} options
+ * @param {'group'|'knockout'|'all'} [options.phaseFilter] - When 'group', only
+ *   rows with match_no <= GROUP_STAGE_MAX_MATCH_NO are returned. When
+ *   'knockout', only rows with match_no > GROUP_STAGE_MAX_MATCH_NO are
+ *   returned. This lets the same WORLDCUP sheet layout be reused for both the
+ *   root-folder (group) Excels and the Eliminatoria-folder (knockout) Excels,
+ *   ignoring whichever rows don't belong to that file's phase.
+ */
+export function parsePredictionsFromExcelBuffer(buffer, fileMeta = {}, options = {}) {
+  const phaseFilter = options.phaseFilter || 'all';
   const cfg = getConfig();
   const workbook = XLSX.read(buffer, {
     type: 'buffer',
@@ -186,6 +199,10 @@ export function parsePredictionsFromExcelBuffer(buffer, fileMeta = {}) {
     const predAway = cellToNumber(row[COLS.predAway]);
 
     if (!Number.isInteger(matchNo) || !homeTeam || !awayTeam) continue;
+
+    const isGroupRow = matchNo <= GROUP_STAGE_MAX_MATCH_NO;
+    if (phaseFilter === 'group' && !isGroupRow) continue;
+    if (phaseFilter === 'knockout' && isGroupRow) continue;
 
     if (!Number.isInteger(predHome) || !Number.isInteger(predAway)) {
       warnings.push({ file: fileMeta.name, matchNo, message: 'Missing or non-numeric prediction' });

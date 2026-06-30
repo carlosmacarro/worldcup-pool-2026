@@ -1,7 +1,8 @@
 import { getSupabase, fetchAll } from './db.mjs';
 import { fetchFootballDataMatches, mapFootballDataMatches } from './footballData.mjs';
+import { mapKnockoutMatches } from './knockoutMatches.mjs';
 import { getConfig } from './config.mjs';
-import { GROUP_STAGE_MAX_MATCH_NO, isPhaseMatch } from './phases.mjs';
+import { isPhaseMatch } from './phases.mjs';
 
 const CHUNK_SIZE = 500;
 
@@ -65,23 +66,24 @@ function buildExcelFixturesFromStoredPredictions(predictions) {
 async function syncMatchesFromFootballData(supabase, excelFixtures, warnings) {
   const cfg = getConfig();
   const apiMatches = await fetchFootballDataMatches();
-  const mappedMatches = mapFootballDataMatches(apiMatches, {
+
+  const mappedGroupMatches = mapFootballDataMatches(apiMatches, {
     countLiveMatches: cfg.countLiveMatches,
     excelFixtures,
     warnings
   });
+  const mappedKnockoutMatches = mapKnockoutMatches(apiMatches, {
+    countLiveMatches: cfg.countLiveMatches,
+    warnings
+  });
 
-  await upsertChunked(supabase, 'matches', mappedMatches, 'match_no');
+  await upsertChunked(supabase, 'matches', mappedGroupMatches, 'match_no');
+  await upsertChunked(supabase, 'matches', mappedKnockoutMatches, 'match_no');
 
-  // Keep automatic sync group-stage only. Never allow API rows to populate
-  // knockout placeholders/bets from the Excel template.
-  const { error: cleanupError } = await supabase
-    .from('matches')
-    .delete()
-    .gt('match_no', GROUP_STAGE_MAX_MATCH_NO);
-  if (cleanupError) throw cleanupError;
-
-  return { matchesCount: mappedMatches.length, apiMatchesCount: apiMatches.length };
+  return {
+    matchesCount: mappedGroupMatches.length + mappedKnockoutMatches.length,
+    apiMatchesCount: apiMatches.length
+  };
 }
 
 export async function runResultsOnlySync({ source = 'scheduled-results-only' } = {}) {
@@ -94,7 +96,9 @@ export async function runResultsOnlySync({ source = 'scheduled-results-only' } =
 
     // Lightweight automatic path: no Google Drive listing, no Excel downloads,
     // no workbook parsing. The existing predictions in Supabase define the
-    // fixture rows, and this job only refreshes API results/scores.
+    // group-stage fixture rows; knockout fixture rows come straight from the
+    // API via mapKnockoutMatches (independent of any Excel guess). This job
+    // only refreshes scores/status for both phases.
     const predictions = await fetchAll('predictions', { orderBy: 'match_no' });
     const excelFixtures = buildExcelFixturesFromStoredPredictions(predictions);
 
