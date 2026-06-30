@@ -77,11 +77,39 @@ export function scoreSpecialPrediction(category, predictedValue, actualValue) {
 // pair stored on the match row (order-insensitive), rather than trying to
 // trace bracket logic.
 
+//function teamsMatchUnordered(predHome, predAway, realHome, realAway) {
+  //if (!predHome || !predAway || !realHome || !realAway) return false;
+  //const a = [normaliseTeam(predHome), normaliseTeam(predAway)].sort();
+  //const b = [normaliseTeam(realHome), normaliseTeam(realAway)].sort();
+  //return a[0] === b[0] && a[1] === b[1];
+//}
+function teamMatchLoose(a, b) {
+  if (!a || !b) return false;
+
+  const na = normaliseTeam(a);
+  const nb = normaliseTeam(b);
+
+  if (!na || !nb) return false;
+
+  // exact match
+  if (na === nb) return true;
+
+  // 🔥 NEW: loose match (handles Cabo Verde / Cape Verde etc.)
+  return na.includes(nb) || nb.includes(na);
+}
+
 function teamsMatchUnordered(predHome, predAway, realHome, realAway) {
   if (!predHome || !predAway || !realHome || !realAway) return false;
-  const a = [normaliseTeam(predHome), normaliseTeam(predAway)].sort();
-  const b = [normaliseTeam(realHome), normaliseTeam(realAway)].sort();
-  return a[0] === b[0] && a[1] === b[1];
+
+  const match1 =
+    teamMatchLoose(predHome, realHome) &&
+    teamMatchLoose(predAway, realAway);
+
+  const match2 =
+    teamMatchLoose(predHome, realAway) &&
+    teamMatchLoose(predAway, realHome);
+
+  return match1 || match2;
 }
 
 /**
