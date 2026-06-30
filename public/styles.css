@@ -487,3 +487,17 @@ input {
   .participant-card { align-items: flex-start; }
   .small-link { white-space: nowrap; }
 }
+
+/* ── Knockout & bonus bet cards ─────────────────────── */
+.knockout-bet .bet-header .match-no { font-size: 0.75rem; }
+
+.bet-actual {
+  font-size: 0.82rem;
+  margin-top: 4px;
+  color: var(--text-secondary, #94a3b8);
+}
+.bet-actual.wrong-matchup {
+  color: var(--color-miss, #fca5a5);
+}
+.bonus-bet { border-left: 3px solid #d8b4fe; }
+.pill.bonus { color: #d8b4fe; }
