@@ -77,39 +77,11 @@ export function scoreSpecialPrediction(category, predictedValue, actualValue) {
 // pair stored on the match row (order-insensitive), rather than trying to
 // trace bracket logic.
 
-//function teamsMatchUnordered(predHome, predAway, realHome, realAway) {
-  //if (!predHome || !predAway || !realHome || !realAway) return false;
-  //const a = [normaliseTeam(predHome), normaliseTeam(predAway)].sort();
-  //const b = [normaliseTeam(realHome), normaliseTeam(realAway)].sort();
-  //return a[0] === b[0] && a[1] === b[1];
-//}
-function teamMatchLoose(a, b) {
-  if (!a || !b) return false;
-
-  const na = normaliseTeam(a);
-  const nb = normaliseTeam(b);
-
-  if (!na || !nb) return false;
-
-  // exact match
-  if (na === nb) return true;
-
-  // 🔥 NEW: loose match (handles Cabo Verde / Cape Verde etc.)
-  return na.includes(nb) || nb.includes(na);
-}
-
 function teamsMatchUnordered(predHome, predAway, realHome, realAway) {
   if (!predHome || !predAway || !realHome || !realAway) return false;
-
-  const match1 =
-    teamMatchLoose(predHome, realHome) &&
-    teamMatchLoose(predAway, realAway);
-
-  const match2 =
-    teamMatchLoose(predHome, realAway) &&
-    teamMatchLoose(predAway, realHome);
-
-  return match1 || match2;
+  const a = [normaliseTeam(predHome), normaliseTeam(predAway)].sort();
+  const b = [normaliseTeam(realHome), normaliseTeam(realAway)].sort();
+  return a[0] === b[0] && a[1] === b[1];
 }
 
 /**
@@ -129,9 +101,9 @@ export function scoreKnockoutPrediction(prediction, match) {
   // The matchup the participant bet on never actually happened: their earlier
   // round picks were wrong, so this slot was contested by different teams.
   // Score 0 silently instead of erroring.
-  if (!teamsMatchUnordered(prediction.home_team, prediction.away_team, match.home_team, match.away_team)) {
-    return { points: 0, type: 'wrong-matchup', round };
-  }
+  // if (!teamsMatchUnordered(prediction.home_team, prediction.away_team, match.home_team, match.away_team)) {
+  //   return { points: 0, type: 'wrong-matchup', round };
+  // }
 
   const predHome = Number(prediction.pred_home);
   const predAway = Number(prediction.pred_away);
