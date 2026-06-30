@@ -10,19 +10,48 @@ function scoreValue(scoreObj, key) {
 }
 
 export function pickScore(match) {
-  const candidates = [
-    { value: match?.score?.fullTime, source: 'fullTime' },
-    { value: match?.score?.regularTime, source: 'regularTime' },
-    { value: match?.score?.current, source: 'liveOrPartial' },
-    { value: match?.score?.halfTime, source: 'halfTime' }
-  ];
+  const status = normalizedStatus(match);
+  const homeFT = match?.score?.fullTime?.home ?? 0;
+  const awayFT = match?.score?.fullTime?.away ?? 0;
 
-  for (const candidate of candidates) {
-    const home = scoreValue(candidate.value, 'home');
-    const away = scoreValue(candidate.value, 'away');
-    if (Number.isFinite(home) && Number.isFinite(away)) {
-      return { home, away, source: candidate.source };
+  const homeET = match?.score?.extraTime?.home ?? 0;
+  const awayET = match?.score?.extraTime?.away ?? 0;
+
+  const isFinished =
+    status === "FINISHED" ||
+    status === "FT" ||
+    status === "AET"; // some APIs use "after extra time"
+
+  const isLive =
+    status === "LIVE" ||
+    status === "IN_PLAY" ||
+    status === "PAUSED";
+
+  if (isLive) {
+    // during live match: fullTime is actually the current score
+      const candidates = [
+      { value: match?.score?.fullTime, source: 'fullTime' },
+      { value: match?.score?.regularTime, source: 'regularTime' },
+      { value: match?.score?.current, source: 'liveOrPartial' },
+      { value: match?.score?.halfTime, source: 'halfTime' }
+    ];
+  
+    for (const candidate of candidates) {
+      const home = scoreValue(candidate.value, 'home');
+      const away = scoreValue(candidate.value, 'away');
+      if (Number.isFinite(home) && Number.isFinite(away)) {
+        return { home, away, source: candidate.source };
+      }
     }
+  }
+  
+  if (isFinished) {
+    // final result includes extra time but excludes penalties
+    return {
+      home: homeFT + homeET,
+      away: awayFT + awayET,
+      source: "final_with_extra_time"
+    };
   }
 
   return { home: null, away: null, source: null };
