@@ -94,7 +94,12 @@ function renderParticipants(rows) {
     item.innerHTML = `
       <a class="participant-main" href="/participant.html?participant=${encodeURIComponent(row.participantKey)}&phase=group">
         <strong>${escapeHtml(row.name)}</strong>
-        <span>Open bets · Group: ${row.total ?? 0} pts · ${row.played ?? 0} scored</span>
+        <span>
+          Matches: ${row.total ?? 0} pts · Exactos ${row.exact ?? 0} · Resultado ${row.goalDifference ?? 0} · Ganador ${row.winner ?? 0} · Fallos ${row.miss ?? 0}
+        </span>
+        <span>
+          Bonos: grupo +${row.groupPosition ?? 0} · especiales +${row.special ?? 0}
+        </span>
       </a>
     `;
     elements.participants.appendChild(item);

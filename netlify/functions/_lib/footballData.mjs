@@ -133,6 +133,56 @@ export async function fetchFootballDataMatches() {
   return Array.isArray(payload?.matches) ? payload.matches.filter(Boolean) : [];
 }
 
+function normalizeStandingGroupName(group) {
+  const raw = String(group || '').toUpperCase().trim();
+  const match = raw.match(/GROUP[_-]?([A-Z0-9]+)/);
+  if (match) return match[1];
+  return raw.replace(/^GROUP[_-]?/, '') || null;
+}
+
+export async function fetchFootballDataStandings() {
+  const cfg = getConfig();
+  const endpoint = new URL(`https://api.football-data.org/v4/competitions/${cfg.footballCompetitionCode}/standings`);
+  endpoint.searchParams.set('season', cfg.footballSeason);
+
+  const response = await fetch(endpoint, {
+    headers: { 'X-Auth-Token': cfg.footballDataToken }
+  });
+
+  const text = await response.text();
+  let payload;
+  try {
+    payload = JSON.parse(text);
+  } catch {
+    payload = { raw: text };
+  }
+
+  if (!response.ok) {
+    const message = payload?.message || payload?.error || text || `HTTP ${response.status}`;
+    throw new Error(`football-data.org standings request failed: ${message}`);
+  }
+
+  const rows = [];
+  for (const standing of payload?.standings || []) {
+    const groupName = normalizeStandingGroupName(standing?.group);
+    if (!groupName || !Array.isArray(standing?.table)) continue;
+
+    for (const row of standing.table) {
+      const position = Number(row?.position);
+      const team = row?.team?.name || row?.team?.shortName || row?.team?.tla || null;
+      if (!Number.isInteger(position) || !team) continue;
+      rows.push({
+        group_name: groupName,
+        position,
+        team,
+        updated_at: new Date().toISOString()
+      });
+    }
+  }
+
+  return rows;
+}
+
 function parseOverrides() {
   if (!process.env.MATCH_API_ID_OVERRIDES) return {};
   try {

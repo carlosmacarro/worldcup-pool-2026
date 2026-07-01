@@ -1,7 +1,7 @@
 import { getSupabase } from './db.mjs';
 import { listExcelFilesByPhase, downloadDriveFileBuffer } from './googleDrive.mjs';
 import { parsePredictionsFromExcelBuffer } from './xlsxParser.mjs';
-import { fetchFootballDataMatches, mapFootballDataMatches } from './footballData.mjs';
+import { fetchFootballDataMatches, fetchFootballDataStandings, mapFootballDataMatches } from './footballData.mjs';
 import { mapKnockoutMatches } from './knockoutMatches.mjs';
 import { getConfig } from './config.mjs';
 import { GROUP_STAGE_MAX_MATCH_NO, isPhaseMatch } from './phases.mjs';
@@ -136,6 +136,25 @@ async function replaceBonusRows(supabase, table, conflictColumns, participantKey
   }
 }
 
+async function syncGroupStandingsFromFootballData(supabase, warnings) {
+  try {
+    const standingsRows = await fetchFootballDataStandings();
+    if (!standingsRows.length) {
+      warnings.push({ message: 'football-data.org standings response did not contain any group rows.' });
+      return 0;
+    }
+
+    const { error: deleteError } = await supabase.from('group_standings').delete();
+    if (deleteError) throw deleteError;
+
+    await upsertChunked(supabase, 'group_standings', standingsRows, 'group_name,position');
+    return standingsRows.length;
+  } catch (error) {
+    warnings.push({ message: `Could not refresh group standings from football-data.org: ${error.message || error}` });
+    return 0;
+  }
+}
+
 async function syncPredictionsFromDrive(supabase, warnings) {
   const { groupFiles, knockoutFiles, eliminatoriaFolderId } = await listExcelFilesByPhase();
 
@@ -232,6 +251,7 @@ export async function runSync({ source = 'manual' } = {}) {
   try {
     logId = await insertLog(supabase, source);
     const predictionStats = await syncPredictionsFromDrive(supabase, warnings);
+    await syncGroupStandingsFromFootballData(supabase, warnings);
     const matchStats = await syncMatchesFromFootballData(supabase, predictionStats.excelFixtures || [], warnings);
     const { excelFixtures, ...publicPredictionStats } = predictionStats;
 
