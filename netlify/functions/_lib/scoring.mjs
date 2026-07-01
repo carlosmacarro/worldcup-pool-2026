@@ -101,9 +101,11 @@ export function scoreKnockoutPrediction(prediction, match) {
   // The matchup the participant bet on never actually happened: their earlier
   // round picks were wrong, so this slot was contested by different teams.
   // Score 0 silently instead of erroring.
-  // if (!teamsMatchUnordered(prediction.home_team, prediction.away_team, match.home_team, match.away_team)) {
-  //   return { points: 0, type: 'wrong-matchup', round };
-  // }
+  // Note: With the new team-pair lookup in leaderboardBuilder, this check is
+  // now redundant but kept as defensive programming.
+  if (!teamsMatchUnordered(prediction.home_team, prediction.away_team, match.home_team, match.away_team)) {
+    return { points: 0, type: 'wrong-matchup', round };
+  }
 
   const predHome = Number(prediction.pred_home);
   const predAway = Number(prediction.pred_away);
