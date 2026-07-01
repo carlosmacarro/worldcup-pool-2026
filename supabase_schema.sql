@@ -39,6 +39,36 @@ create table if not exists matches (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists group_position_predictions (
+  participant_key text not null references participants(participant_key) on delete cascade,
+  group_name text not null,
+  position integer not null check (position between 1 and 4),
+  team text not null,
+  updated_at timestamptz not null default now(),
+  primary key (participant_key, group_name, position)
+);
+
+create table if not exists group_standings (
+  group_name text not null,
+  position integer not null check (position between 1 and 4),
+  team text not null,
+  primary key (group_name, position)
+);
+
+create table if not exists special_predictions (
+  participant_key text not null references participants(participant_key) on delete cascade,
+  category text not null,
+  predicted_value text not null,
+  updated_at timestamptz not null default now(),
+  primary key (participant_key, category)
+);
+
+create table if not exists special_results (
+  category text primary key,
+  actual_value text not null,
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists sync_logs (
   id bigint generated always as identity primary key,
   started_at timestamptz not null default now(),

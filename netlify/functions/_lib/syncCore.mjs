@@ -59,6 +59,8 @@ function disambiguateParticipantKeys(parsedFiles, warnings) {
     const uniqueKey = `${originalKey}-${suffix}`;
     item.participant.participant_key = uniqueKey;
     item.predictions = item.predictions.map((prediction) => ({ ...prediction, participant_key: uniqueKey }));
+    item.groupPositions = (item.groupPositions || []).map((row) => ({ ...row, participant_key: uniqueKey }));
+    item.specialPredictions = (item.specialPredictions || []).map((row) => ({ ...row, participant_key: uniqueKey }));
     warnings.push({ file: item.participant.file_name, message: `Duplicate participant name. Key changed from '${originalKey}' to '${uniqueKey}'.` });
   }
 }
@@ -120,6 +122,20 @@ async function replacePredictionsInRange(supabase, participantKey, matchNoFrom, 
   await upsertChunked(supabase, 'predictions', predictions, 'participant_key,match_no');
 }
 
+async function replaceBonusRows(supabase, table, conflictColumns, participantKey, rows, warnings) {
+  if (!rows.length) return;
+
+  try {
+    const { error: deleteError } = await supabase.from(table).delete().eq('participant_key', participantKey);
+    if (deleteError) throw deleteError;
+    await upsertChunked(supabase, table, rows, conflictColumns);
+  } catch (error) {
+    warnings.push({
+      message: `Could not save '${table}' rows for ${participantKey}: ${error.message || error}. Run the latest supabase_schema.sql additions.`
+    });
+  }
+}
+
 async function syncPredictionsFromDrive(supabase, warnings) {
   const { groupFiles, knockoutFiles, eliminatoriaFolderId } = await listExcelFilesByPhase();
 
@@ -154,7 +170,10 @@ async function syncPredictionsFromDrive(supabase, warnings) {
 
     // Replace only the group-stage rows (match_no 1-72) per participant.
     for (const parsed of groupParsed) {
-      await replacePredictionsInRange(supabase, parsed.participant.participant_key, 1, GROUP_STAGE_MAX_MATCH_NO, parsed.predictions);
+      const key = parsed.participant.participant_key;
+      await replacePredictionsInRange(supabase, key, 1, GROUP_STAGE_MAX_MATCH_NO, parsed.predictions);
+      await replaceBonusRows(supabase, 'group_position_predictions', 'participant_key,group_name,position', key, parsed.groupPositions || [], warnings);
+      await replaceBonusRows(supabase, 'special_predictions', 'participant_key,category', key, parsed.specialPredictions || [], warnings);
     }
   }
 

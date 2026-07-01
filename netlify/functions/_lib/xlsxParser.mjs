@@ -17,6 +17,20 @@ const COLS = {
   matchNo: 33
 };
 
+const GROUP_NAMES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+const GROUP_BLOCK_START_ROW = 6;
+const GROUP_BLOCK_STRIDE = 8;
+const GROUP_POSITION_COL = 'AJ';
+const GROUP_TEAM_COL = 'AL';
+
+const SPECIAL_CELLS = {
+  winner: 'AA150',
+  second: 'AA151',
+  third: 'AA152',
+  bota_de_oro: 'AA154',
+  balon_de_oro: 'AA158'
+};
+
 function getSheetCaseInsensitive(workbook, targetName) {
   const name = workbook.SheetNames.find((s) => s.toLowerCase() === targetName.toLowerCase());
   if (!name) return null;
@@ -155,6 +169,39 @@ function getParticipantName(workbook, fallbackFileName) {
     .trim() || fallbackFileName;
 }
 
+function parseGroupPositionPredictions(sheet) {
+  const rows = [];
+
+  GROUP_NAMES.forEach((groupName, groupIndex) => {
+    const startRow = GROUP_BLOCK_START_ROW + groupIndex * GROUP_BLOCK_STRIDE;
+
+    for (let offset = 0; offset < 4; offset += 1) {
+      const row = startRow + offset;
+      const team = String(readCell(sheet, `${GROUP_TEAM_COL}${row}`) || '').trim();
+      if (!team) continue;
+
+      const cellPos = cellToNumber(readCell(sheet, `${GROUP_POSITION_COL}${row}`));
+      const position = Number.isInteger(cellPos) && cellPos >= 1 && cellPos <= 4 ? cellPos : offset + 1;
+
+      rows.push({ group_name: groupName, position, team });
+    }
+  });
+
+  return rows;
+}
+
+function parseSpecialPredictions(sheet) {
+  const rows = [];
+
+  for (const [category, address] of Object.entries(SPECIAL_CELLS)) {
+    const value = String(readCell(sheet, address) || '').trim();
+    if (!value) continue;
+    rows.push({ category, predicted_value: value });
+  }
+
+  return rows;
+}
+
 /**
  * @param {Buffer} buffer
  * @param {object} fileMeta
@@ -226,6 +273,16 @@ export function parsePredictionsFromExcelBuffer(buffer, fileMeta = {}, options =
     throw new Error(`No predictions found in ${fileMeta.name || 'Excel file'}. Check the WORLDCUP sheet and columns X:AH.`);
   }
 
+  const groupPositions = parseGroupPositionPredictions(sheet).map((row) => ({
+    ...row,
+    participant_key: participantKey
+  }));
+
+  const specialPredictions = parseSpecialPredictions(sheet).map((row) => ({
+    ...row,
+    participant_key: participantKey
+  }));
+
   return {
     participant: {
       participant_key: participantKey,
@@ -235,6 +292,8 @@ export function parsePredictionsFromExcelBuffer(buffer, fileMeta = {}, options =
       updated_at: new Date().toISOString()
     },
     predictions: predictions.sort((a, b) => a.match_no - b.match_no),
+    groupPositions,
+    specialPredictions,
     warnings
   };
 }

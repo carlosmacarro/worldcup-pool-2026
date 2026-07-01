@@ -86,12 +86,11 @@ function latestSyncSummary(logs) {
     : null;
 }
 
-// ─── Knockout match lookup by team-pair + round ────────────────────────────
-// THE CORE FIX: knockout match_no slots are assigned chronologically by the
-// API, but participant Excels may have predictions in different row order.
-// Solution: for knockout predictions we look up the real match by (round,
-// unordered-team-pair) instead of by match_no. If the pair never played in
-// that round → wrong-matchup (0 pts). If they did → score normally.
+// ─── Knockout match lookup by team-pair across ALL rounds ────────────────────────────
+// THE CORE FIX: Match_no from Excel cannot be trusted (users may enter sequential
+// numbers 1,2,3... or wrong values). Solution: For knockout predictions, search
+// by unordered-team-pair across ALL knockout rounds. This works because each
+// team pair can only play once in the entire tournament.
 
 function unorderedPairKey(t1, t2) {
   if (!t1 || !t2) return null;
@@ -101,15 +100,15 @@ function unorderedPairKey(t1, t2) {
   return [a, b].sort().join('__');
 }
 
-function buildKnockoutMatchByRoundPair(matches) {
+function buildKnockoutMatchesByPair(matches) {
   const map = new Map();
   for (const match of matches) {
     if (!isPhaseMatch(match, 'knockout')) continue;
-    const round = knockoutRoundForMatchNo(match.match_no);
-    if (!round) continue;
     const pair = unorderedPairKey(match.home_team, match.away_team);
     if (!pair) continue;
-    map.set(`${round.key}::${pair}`, match);
+    // Store all matches by unordered team pair
+    // Each pair appears at most once across all knockout rounds
+    map.set(pair, match);
   }
   return map;
 }
@@ -128,12 +127,11 @@ function buildFinishedRounds(matches) {
   return finished;
 }
 
-function findKnockoutMatch(prediction, knockoutMatchByRoundPair) {
-  const round = knockoutRoundForMatchNo(prediction.match_no);
-  if (!round) return null;
+function findKnockoutMatch(prediction, knockoutMatchesByPair) {
+  // Match purely by team pair, ignoring the potentially-wrong match_no from Excel
   const pair = unorderedPairKey(prediction.home_team, prediction.away_team);
   if (!pair) return null;
-  return knockoutMatchByRoundPair.get(`${round.key}::${pair}`) ?? null;
+  return knockoutMatchesByPair.get(pair) ?? null;
 }
 
 function applyGroupPrediction(participant, prediction, match) {
@@ -175,38 +173,31 @@ function applyGroupPrediction(participant, prediction, match) {
 }
 
 function applyKnockoutPrediction(participant, prediction, match, finishedRounds) {
-  // If no real match found, check if round is finished to distinguish pending vs wrong-matchup
+  // If no real match found by team pair, it's pending (we can't determine which round
+  // this prediction was supposed to be in without trusting the potentially-wrong match_no)
   if (!match) {
-    const round = knockoutRoundForMatchNo(prediction.match_no);
-    const roundKey = round?.key;
-    const isWrongMatchup = roundKey ? finishedRounds.has(roundKey) : false;
-    const type = isWrongMatchup ? 'wrong-matchup' : 'pending';
-
-    if (isWrongMatchup) {
-      participant.played += 1;
-      participant.miss += 1;
-    } else {
-      participant.pending += 1;
-    }
+    participant.pending += 1;
 
     return {
       matchNo: prediction.match_no,
       phase: 'knockout',
-      round: round?.key || null,
-      roundLabel: round?.label || prediction.round_label || null,
+      round: null,
+      roundLabel: prediction.round_label || null,
       kickoff: prediction.kickoff || null,
-      status: isWrongMatchup ? 'WRONG_MATCHUP' : 'PENDING',
+      status: 'PENDING',
       homeTeam: prediction.home_team,
       awayTeam: prediction.away_team,
       predicted: { home: prediction.pred_home, away: prediction.pred_away },
       actual: { home: null, away: null, source: null },
       points: 0,
-      type,
-      maxPoints: round?.points?.winner ?? null
+      type: 'pending',
+      maxPoints: null
     };
   }
 
-  const { points, type, round } = scoreKnockoutPrediction(prediction, match);
+  // Match found: get the round from the actual match (not prediction.match_no)
+  const round = knockoutRoundForMatchNo(match.match_no);
+  const { points, type } = scoreKnockoutPrediction(prediction, match);
   const isScorable = effectiveIsScorable(match);
 
   if (isScorable) {
@@ -358,7 +349,7 @@ export async function buildLeaderboard({ phase = 'group' } = {}) {
   const filteredMatches = matches.filter((m) => isPhaseMatch(m, selectedPhase));
   const participantMap = new Map(participants.map((p) => [p.participant_key, createParticipantSummary(p, selectedPhase)]));
   const matchMap = new Map(matches.map((m) => [m.match_no, m]));
-  const knockoutByPair = buildKnockoutMatchByRoundPair(matches);
+  const knockoutByPair = buildKnockoutMatchesByPair(matches);
   const finishedRounds = buildFinishedRounds(matches);
 
   for (const prediction of predictions) {
@@ -445,12 +436,18 @@ export async function buildParticipantBets(participantKey, { phase = 'group' } =
 
   const summary = createParticipantSummary(participant, selectedPhase);
   const matchMap = new Map(matches.map((m) => [m.match_no, m]));
+  const knockoutByPair = buildKnockoutMatchesByPair(matches);
+  const finishedRounds = buildFinishedRounds(matches);
   const participantPredictions = predictions
     .filter((p) => p.participant_key === participantKey)
     .filter((p) => isPhaseMatch(p, selectedPhase));
 
   for (const prediction of participantPredictions) {
-    applyPredictionToParticipant(summary, prediction, matchMap.get(prediction.match_no));
+    const isKnockout = isPhaseMatch(prediction, 'knockout');
+    const match = isKnockout
+      ? findKnockoutMatch(prediction, knockoutByPair)
+      : matchMap.get(prediction.match_no);
+    applyPredictionToParticipant(summary, prediction, match, finishedRounds);
   }
 
   if (selectedPhase === 'all') {
