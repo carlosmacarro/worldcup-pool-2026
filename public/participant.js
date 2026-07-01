@@ -9,6 +9,8 @@ const elements = {
   betsTitle: document.querySelector('#betsTitle'),
   lastUpdated: document.querySelector('#lastUpdated'),
   totalPoints: document.querySelector('#totalPoints'),
+  groupPositionPoints: document.querySelector('#groupPositionPoints'),
+  specialPoints: document.querySelector('#specialPoints'),
   playedBets: document.querySelector('#playedBets'),
   pendingBets: document.querySelector('#pendingBets'),
   bets: document.querySelector('#bets'),
@@ -49,6 +51,43 @@ function pointClass(bet) {
   return 'miss';
 }
 
+function renderGroupPositionBet(bet) {
+  const card = document.createElement('article');
+  card.className = 'bet-card bonus-bet';
+  card.innerHTML = `
+    <div class="bet-header">
+      <span class="match-no">Grupo ${escapeHtml(bet.groupName)} · ${bet.position}º</span>
+      <span class="pill ${bet.points > 0 ? 'exact' : 'miss'}">${bet.points > 0 ? `+${bet.points} pts` : 'Pendiente'}</span>
+    </div>
+    <div class="bet-teams">Apuesta: <strong>${escapeHtml(bet.predictedTeam || '–')}</strong></div>
+    ${bet.actualTeam ? `<div class="bet-actual">Real: <strong>${escapeHtml(bet.actualTeam)}</strong></div>` : ''}
+  `;
+  return card;
+}
+
+const SPECIAL_LABELS = {
+  winner: 'Campeón del mundo',
+  second: 'Subcampeón',
+  third: 'Tercer puesto',
+  balon_de_oro: 'Balón de Oro',
+  bota_de_oro: 'Bota de Oro'
+};
+
+function renderSpecialBet(bet) {
+  const card = document.createElement('article');
+  card.className = 'bet-card bonus-bet';
+  const label = SPECIAL_LABELS[bet.category] || bet.category;
+  card.innerHTML = `
+    <div class="bet-header">
+      <span class="match-no">${escapeHtml(label)}</span>
+      <span class="pill ${bet.points > 0 ? 'exact' : 'miss'}">${bet.points > 0 ? `+${bet.points} pts` : 'Pendiente'}</span>
+    </div>
+    <div class="bet-teams">Apuesta: <strong>${escapeHtml(bet.predictedValue || '–')}</strong></div>
+    ${bet.actualValue ? `<div class="bet-actual">Real: <strong>${escapeHtml(bet.actualValue)}</strong></div>` : ''}
+  `;
+  return card;
+}
+
 function pointsLabel(bet) {
   if (bet.type === 'pending') return 'Pending';
   if (bet.type === 'wrong-matchup') return 'Cruce no jugado · 0 pts';
@@ -64,6 +103,15 @@ function renderBets(bets) {
 
   for (const bet of bets) {
     const card = document.createElement('article');
+    if (bet.phase === 'group-position') {
+      elements.bets.appendChild(renderGroupPositionBet(bet));
+      continue;
+    }
+    if (bet.phase === 'special') {
+      elements.bets.appendChild(renderSpecialBet(bet));
+      continue;
+    }
+
     card.className = 'bet-card';
     const pointsLabelText = pointsLabel(bet);
     card.innerHTML = `
@@ -103,6 +151,8 @@ async function loadParticipant() {
     elements.betsTitle.textContent = data.phaseLabel;
     elements.lastUpdated.textContent = data.lastSync?.finishedAt ? `Last sync: ${formatDate(data.lastSync.finishedAt)}` : 'Waiting for first sync';
     elements.totalPoints.textContent = data.summary.total;
+    elements.groupPositionPoints.textContent = data.summary.groupPosition ?? 0;
+    elements.specialPoints.textContent = data.summary.special ?? 0;
     elements.playedBets.textContent = data.summary.played;
     elements.pendingBets.textContent = data.summary.pending;
 

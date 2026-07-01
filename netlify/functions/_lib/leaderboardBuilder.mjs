@@ -5,7 +5,7 @@ import { normaliseTeam } from './normalise.mjs';
 
 const LIVE_STATUSES = new Set(['IN_PLAY', 'LIVE', 'PAUSED']);
 const FINAL_STATUSES = new Set(['FINISHED', 'AWARDED', 'AFTER_EXTRA_TIME', 'PENALTY_SHOOTOUT']);
-const NOT_STARTED_STATUSES = new Set(['SCHEDULED', 'TIMED', 'POSTPONED', 'CANCELLED', 'CANCELED', 'SUSPENDED']);
+const NOT_STARTED_STATUSES = new Set(['SCHEDULED', 'TIMED', 'POSTPONED', 'CANCELLED', 'CANCELED', 'SUSPENDED', 'PENDING']);
 
 // Tables for the group-position bonus and tournament-wide special awards are
 // optional add-ons (see supabase_schema.sql). If they haven't been created
@@ -197,8 +197,32 @@ function applyKnockoutPrediction(participant, prediction, match, finishedRounds)
 
   // Match found: get the round from the actual match (not prediction.match_no)
   const round = knockoutRoundForMatchNo(match.match_no);
-  const { points, type } = scoreKnockoutPrediction(prediction, match);
   const isScorable = effectiveIsScorable(match);
+  if (!isScorable) {
+    participant.pending += 1;
+
+    return {
+      matchNo: prediction.match_no,
+      phase: 'knockout',
+      round: round?.key || null,
+      roundLabel: round?.label || prediction.round_label || null,
+      kickoff: match.kickoff || prediction.kickoff,
+      status: match.status || 'PENDING',
+      homeTeam: prediction.home_team,
+      awayTeam: prediction.away_team,
+      predicted: { home: prediction.pred_home, away: prediction.pred_away },
+      actual: {
+        home: match.real_home ?? null,
+        away: match.real_away ?? null,
+        source: match.score_source || null
+      },
+      points: 0,
+      type: 'pending',
+      maxPoints: round?.points?.winner ?? null
+    };
+  }
+
+  const { points, type } = scoreKnockoutPrediction(prediction, match);
 
   if (isScorable) {
     participant.total += points;
@@ -450,13 +474,18 @@ export async function buildParticipantBets(participantKey, { phase = 'group' } =
     applyPredictionToParticipant(summary, prediction, match, finishedRounds);
   }
 
-  if (selectedPhase === 'all') {
-    const { groupPositionPredictions, specialPredictions, actualStandingsByGroup, resultsByCategory } = await loadBonusData();
-    applyGroupPositionBonuses(summary, groupPositionPredictions.filter((r) => r.participant_key === participantKey), actualStandingsByGroup);
-    applySpecialBonuses(summary, specialPredictions.filter((r) => r.participant_key === participantKey), resultsByCategory);
-  }
+  const { groupPositionPredictions, specialPredictions, actualStandingsByGroup, resultsByCategory } = await loadBonusData();
+  applyGroupPositionBonuses(summary, groupPositionPredictions.filter((r) => r.participant_key === participantKey), actualStandingsByGroup);
+  applySpecialBonuses(summary, specialPredictions.filter((r) => r.participant_key === participantKey), resultsByCategory);
 
-  summary.breakdown.sort((a, b) => (a.matchNo ?? 0) - (b.matchNo ?? 0));
+  summary.breakdown.sort((a, b) => {
+    const aHasMatchNo = Number.isFinite(Number(a.matchNo));
+    const bHasMatchNo = Number.isFinite(Number(b.matchNo));
+    if (aHasMatchNo && bHasMatchNo) return Number(a.matchNo) - Number(b.matchNo);
+    if (aHasMatchNo !== bHasMatchNo) return aHasMatchNo ? -1 : 1;
+    const phaseOrder = { 'group-position': 0, special: 1 };
+    return (phaseOrder[a.phase] ?? 99) - (phaseOrder[b.phase] ?? 99);
+  });
 
   return {
     ok: true,
